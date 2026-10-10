@@ -1,0 +1,323 @@
+// ARMOR-ALARM - host tests of the zones and the panel: scripted scenarios, then a long random run that checks the rules that must always hold.
+// Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
+// Nothing here has run on a real installation: the zones are stand-ins and the clock is a number the test moves.
+#include <cstdio>
+#include <cstdint>
+#include <random>
+#include <string>
+#include <vector>
+
+#include "../core/alarm_panel.hpp"
+#include "../core/alarm_zone.hpp"
+
+static int failures = 0;
+static int checks = 0;
+#define CHECK(condition)                                                              \
+  do {                                                                                \
+    ++checks;                                                                         \
+    if (!(condition)) {                                                               \
+      ++failures;                                                                     \
+      std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #condition);                \
+    }                                                                                 \
+  } while (0)
+
+using namespace armor::alarm;
+
+static std::vector<Zone> house() {
+  return {{"front-door", "Front door", ZoneKind::kEntry}, {"window", "Living room window", ZoneKind::kInstant}, {"hall-motion", "Hall motion", ZoneKind::kInterior},
+          {"smoke", "Kitchen smoke detector", ZoneKind::kAlways}};
+}
+static Timing quick() { Timing t; t.exit_delay_s = 10; t.entry_delay_s = 10; t.siren_max_s = 60; t.lockout_after = 3; t.lockout_s = 30; return t; }
+static bool has_event(const Panel& p, EventKind kind) { for (const Event& e : p.events()) if (e.kind == kind) return true; return false; }
+
+// ---- the loop ----------------------------------------------------------------------------------------------------------------------
+
+static void test_loop() {
+  const LoopLimits limits;   // 400 / 1200 / 2400 mV
+  CHECK(limits_are_valid(limits));
+  CHECK(classify_loop(0, limits) == ZoneState::kTamper && classify_loop(399, limits) == ZoneState::kTamper);      // shorted
+  CHECK(classify_loop(400, limits) == ZoneState::kNormal && classify_loop(1199, limits) == ZoneState::kNormal);   // the closed contact
+  CHECK(classify_loop(1200, limits) == ZoneState::kTriggered && classify_loop(2399, limits) == ZoneState::kTriggered);   // the open contact
+  CHECK(classify_loop(2400, limits) == ZoneState::kTamper && classify_loop(3300, limits) == ZoneState::kTamper);   // a cut wire
+  LoopLimits bad = limits;
+  bad.short_below_mv = 0; CHECK(!limits_are_valid(bad)); bad = limits;
+  bad.normal_below_mv = 300; CHECK(!limits_are_valid(bad)); bad = limits;
+  bad.triggered_below_mv = 1200; CHECK(!limits_are_valid(bad)); bad = limits;
+  bad.triggered_below_mv = 3400; CHECK(!limits_are_valid(bad));
+  // every reading in range is some state, and the states come in order as the voltage rises
+  int last = -1;
+  for (int mv = 0; mv <= 3300; mv += 10) {
+    const int order = classify_loop(mv, limits) == ZoneState::kNormal ? 1 : classify_loop(mv, limits) == ZoneState::kTriggered ? 2 : (mv < 800 ? 0 : 3);
+    CHECK(order >= last); last = order;
+  }
+}
+
+static void test_zone_names() {
+  for (ZoneKind kind : {ZoneKind::kInstant, ZoneKind::kEntry, ZoneKind::kInterior, ZoneKind::kAlways}) { ZoneKind back = ZoneKind::kInstant; CHECK(parse_kind(kind_text(kind), back) && back == kind); }
+  ZoneKind none; CHECK(!parse_kind("24h", none) && !parse_kind("", none));
+  CHECK(valid_zone_id("front-door") && valid_zone_id("z1") && !valid_zone_id("") && !valid_zone_id("-x") && !valid_zone_id("Front") && !valid_zone_id("a b") && !valid_zone_id(std::string(33, 'a')));
+  CHECK(std::string(state_text(ZoneState::kNormal)) == "normal" && std::string(state_text(ZoneState::kTriggered)) == "triggered" && std::string(state_text(ZoneState::kTamper)) == "tamper");
+}
+
+static void test_debounce() {
+  Debouncer d(200);
+  CHECK(d.feed(ZoneState::kNormal, 0) == ZoneState::kNormal);
+  CHECK(d.feed(ZoneState::kTriggered, 100) == ZoneState::kNormal);        // a change must hold
+  CHECK(d.feed(ZoneState::kNormal, 150) == ZoneState::kNormal);           // it bounced back: nothing happened
+  CHECK(d.feed(ZoneState::kTriggered, 160) == ZoneState::kNormal);
+  CHECK(d.feed(ZoneState::kTriggered, 300) == ZoneState::kNormal);        // 140 ms
+  CHECK(d.feed(ZoneState::kTriggered, 360) == ZoneState::kTriggered);     // 200 ms
+  CHECK(d.feed(ZoneState::kNormal, 400) == ZoneState::kTriggered);        // and so does the way back
+  CHECK(d.feed(ZoneState::kNormal, 600) == ZoneState::kNormal);
+  Debouncer first(500);
+  CHECK(first.feed(ZoneState::kTriggered, 5) == ZoneState::kTriggered);   // the first reading is taken as it is
+}
+
+// ---- arming and the delays ---------------------------------------------------------------------------------------------------------
+
+static void test_arm_and_disarm() {
+  Panel p(quick(), house(), "1234");
+  CHECK(p.phase() == Phase::kDisarmed && p.mode() == Mode::kDisarmed && !p.siren());
+  CHECK(p.arm(Mode::kAway, false, 1000) == Refusal::kNone);
+  CHECK(p.phase() == Phase::kExitDelay && p.mode() == Mode::kAway && has_event(p, EventKind::kExitDelayStarted));
+  p.tick(5000); CHECK(p.phase() == Phase::kExitDelay);
+  p.tick(11000); CHECK(p.phase() == Phase::kArmed && has_event(p, EventKind::kArmed));
+  CHECK(p.arm(Mode::kStay, false, 12000) == Refusal::kNotDisarmed);          // already armed
+  CHECK(p.arm(Mode::kDisarmed, false, 12000) == Refusal::kNotArmed);
+  CHECK(p.disarm("0000", 13000) == Refusal::kBadPin && p.phase() == Phase::kArmed);
+  CHECK(p.disarm("1234", 14000) == Refusal::kNone && p.phase() == Phase::kDisarmed && p.mode() == Mode::kDisarmed && has_event(p, EventKind::kDisarmed));
+  CHECK(p.disarm("1234", 15000) == Refusal::kNone && p.phase() == Phase::kDisarmed);   // disarming a disarmed panel is harmless
+}
+
+static void test_instant_zone() {
+  Panel p(quick(), house(), "1234");
+  p.arm(Mode::kAway, false, 0); p.tick(11000);
+  p.set_zone("window", ZoneState::kTriggered, 20000);
+  CHECK(p.phase() == Phase::kAlarm && p.siren() && has_event(p, EventKind::kAlarm) && p.events().back().zone == "window");
+  p.set_zone("window", ZoneState::kNormal, 21000);
+  CHECK(p.phase() == Phase::kAlarm && p.siren());                            // the alarm latches: closing the window does not end it
+  CHECK(p.disarm("9999", 22000) == Refusal::kBadPin && p.phase() == Phase::kAlarm && p.siren());
+  CHECK(p.disarm("1234", 23000) == Refusal::kNone && !p.siren() && p.phase() == Phase::kDisarmed);
+}
+
+static void test_entry_delay() {
+  Panel p(quick(), house(), "1234");
+  p.arm(Mode::kAway, false, 0); p.tick(11000);
+  p.set_zone("front-door", ZoneState::kTriggered, 20000);
+  CHECK(p.phase() == Phase::kEntryDelay && !p.siren() && has_event(p, EventKind::kEntryDelayStarted));
+  p.tick(25000); CHECK(p.phase() == Phase::kEntryDelay);
+  CHECK(p.disarm("1234", 26000) == Refusal::kNone && p.phase() == Phase::kDisarmed);   // in time: no alarm
+  CHECK(!has_event(p, EventKind::kAlarm));
+
+  Panel q(quick(), house(), "1234");
+  q.arm(Mode::kAway, false, 0); q.tick(11000);
+  q.set_zone("front-door", ZoneState::kTriggered, 20000);
+  q.tick(29999); CHECK(q.phase() == Phase::kEntryDelay);
+  q.tick(30000); CHECK(q.phase() == Phase::kAlarm && q.siren() && q.events().back().zone == "front-door");   // too late
+  // an instant zone during the entry delay alarms at once (somebody went past the door into the window)
+  Panel r(quick(), house(), "1234");
+  r.arm(Mode::kAway, false, 0); r.tick(11000);
+  r.set_zone("front-door", ZoneState::kTriggered, 20000);
+  r.set_zone("window", ZoneState::kTriggered, 21000);
+  CHECK(r.phase() == Phase::kAlarm);
+}
+
+static void test_exit_delay() {
+  Panel p(quick(), house(), "1234");
+  p.arm(Mode::kAway, false, 0);
+  p.set_zone("front-door", ZoneState::kTriggered, 3000);    // leaving
+  p.set_zone("hall-motion", ZoneState::kTriggered, 4000);
+  p.set_zone("window", ZoneState::kTriggered, 5000);
+  CHECK(p.phase() == Phase::kExitDelay && !p.siren());       // nobody is an intruder yet...
+  p.tick(11000);
+  CHECK(p.phase() == Phase::kAlarm);                         // ...but what is still open when the delay ends counts (the window), as if it had just opened
+  Panel q(quick(), house(), "1234");
+  q.arm(Mode::kAway, false, 0);
+  q.set_zone("front-door", ZoneState::kTriggered, 3000);
+  q.set_zone("front-door", ZoneState::kNormal, 6000);        // the door was closed behind the person
+  q.tick(11000);
+  CHECK(q.phase() == Phase::kArmed);
+  Panel z(quick(), house(), "1234");
+  z.arm(Mode::kAway, false, 0);
+  z.set_zone("smoke", ZoneState::kTriggered, 2000);          // smoke in the exit delay
+  CHECK(z.phase() == Phase::kAlarm && z.siren());
+}
+
+static void test_modes() {
+  Panel stay(quick(), house(), "1234");
+  stay.arm(Mode::kStay, false, 0); stay.tick(11000);
+  stay.set_zone("hall-motion", ZoneState::kTriggered, 20000);
+  CHECK(stay.phase() == Phase::kArmed);                      // inside, with people at home: ignored
+  stay.set_zone("window", ZoneState::kTriggered, 21000);
+  CHECK(stay.phase() == Phase::kAlarm);                      // the perimeter is not
+  Panel away(quick(), house(), "1234");
+  away.arm(Mode::kAway, false, 0); away.tick(11000);
+  away.set_zone("hall-motion", ZoneState::kTriggered, 20000);
+  CHECK(away.phase() == Phase::kAlarm);
+}
+
+static void test_always_zones_and_tamper() {
+  Panel p(quick(), house(), "1234");                          // disarmed
+  p.set_zone("smoke", ZoneState::kTriggered, 1000);
+  CHECK(p.phase() == Phase::kAlarm && p.siren() && p.mode() == Mode::kDisarmed);
+  CHECK(p.disarm("1234", 2000) == Refusal::kNone && p.phase() == Phase::kDisarmed);
+  // still sounding after disarm: it does not restart on its own, only when it has been quiet and sounds again
+  p.tick(3000); CHECK(p.phase() == Phase::kDisarmed);
+  p.set_zone("smoke", ZoneState::kNormal, 4000);
+  p.set_zone("smoke", ZoneState::kTriggered, 5000);
+  CHECK(p.phase() == Phase::kAlarm);
+  p.disarm("1234", 6000);
+  // a tamper alarms in every state, on any kind of zone, even disarmed
+  Panel t(quick(), house(), "1234");
+  t.set_zone("hall-motion", ZoneState::kTamper, 1000);
+  CHECK(t.phase() == Phase::kAlarm && t.events().back().zone == "hall-motion");
+  // an always-zone sounding cannot be armed over, forced or not
+  Panel s(quick(), house(), "1234");
+  s.set_zone("smoke", ZoneState::kTriggered, 0);
+  s.disarm("1234", 100);
+  CHECK(s.arm(Mode::kAway, false, 200) == Refusal::kZonesOpen && s.arm(Mode::kAway, true, 300) == Refusal::kZonesOpen && s.phase() == Phase::kDisarmed);
+}
+
+static void test_open_zones_at_arming() {
+  Panel p(quick(), house(), "1234");
+  p.set_zone("window", ZoneState::kTriggered, 0);
+  CHECK(p.open_zones(Mode::kAway).size() == 1 && p.open_zones(Mode::kAway)[0] == "window");
+  CHECK(p.arm(Mode::kAway, false, 100) == Refusal::kZonesOpen && p.phase() == Phase::kDisarmed);
+  CHECK(p.arm(Mode::kAway, true, 200) == Refusal::kNone && p.bypassed("window") && has_event(p, EventKind::kZoneBypassed));
+  p.tick(11000);
+  CHECK(p.phase() == Phase::kArmed);                          // the open window is left out...
+  p.set_zone("window", ZoneState::kNormal, 12000);
+  p.set_zone("window", ZoneState::kTriggered, 13000);
+  CHECK(p.phase() == Phase::kArmed);                          // ...for this arming
+  p.disarm("1234", 14000);
+  CHECK(!p.bypassed("window"));                               // and it counts again after the disarm
+  p.set_zone("window", ZoneState::kNormal, 15000);
+  CHECK(p.arm(Mode::kAway, false, 16000) == Refusal::kNone);
+  // an interior zone that is open does not stop a "stay"
+  Panel q(quick(), house(), "1234");
+  q.set_zone("hall-motion", ZoneState::kTriggered, 0);
+  CHECK(q.arm(Mode::kAway, false, 100) == Refusal::kZonesOpen && q.arm(Mode::kStay, false, 200) == Refusal::kNone);
+  // an unknown zone is ignored
+  q.set_zone("nope", ZoneState::kTriggered, 300); CHECK(!q.bypassed("nope") && q.zone_state("nope") == ZoneState::kNormal);
+}
+
+static void test_pin_and_lockout() {
+  Panel p(quick(), house(), "1234");
+  p.arm(Mode::kAway, false, 0); p.tick(11000);
+  CHECK(p.disarm("1111", 12000) == Refusal::kBadPin && p.disarm("2222", 12100) == Refusal::kBadPin && !p.locked_out(12200));
+  CHECK(p.disarm("3333", 12200) == Refusal::kBadPin && p.locked_out(12300) && has_event(p, EventKind::kLockedOut));
+  CHECK(p.disarm("1234", 13000) == Refusal::kLockedOut && p.phase() == Phase::kArmed);   // even the right PIN, while locked out
+  CHECK(p.arm(Mode::kAway, false, 13500) == Refusal::kLockedOut);
+  p.tick(43000); CHECK(!p.locked_out(43000));                                              // 30 s later
+  CHECK(p.disarm("1234", 43500) == Refusal::kNone && p.phase() == Phase::kDisarmed);
+  // a right PIN clears the count
+  Panel q(quick(), house(), "1234");
+  q.arm(Mode::kAway, false, 0); q.tick(11000);
+  q.disarm("0", 12000); q.disarm("0", 12100); q.disarm("1234", 12200);
+  q.arm(Mode::kAway, false, 12300); q.tick(30000);
+  q.disarm("0", 31000); q.disarm("0", 31100);
+  CHECK(!q.locked_out(31200));
+  // PINs of another length, empty ones, and a panel with no PIN set never match
+  CHECK(Panel(quick(), house(), "1234").disarm("", 0) == Refusal::kBadPin && Panel(quick(), house(), "1234").disarm("12345", 0) == Refusal::kBadPin && Panel(quick(), house(), "1234").disarm("123", 0) == Refusal::kBadPin);
+  Panel none(quick(), house(), "");
+  none.arm(Mode::kAway, false, 0); none.tick(11000);
+  CHECK(none.disarm("", 12000) == Refusal::kBadPin && none.phase() == Phase::kArmed);
+}
+
+static void test_siren_times_out() {
+  Panel p(quick(), house(), "1234");
+  p.arm(Mode::kAway, false, 0); p.tick(11000);
+  p.set_zone("window", ZoneState::kTriggered, 20000);
+  p.tick(79999); CHECK(p.siren());
+  p.tick(80000); CHECK(!p.siren() && p.phase() == Phase::kAlarm && has_event(p, EventKind::kSirenTimedOut));   // quiet, but still an alarm
+  CHECK(p.disarm("1234", 90000) == Refusal::kNone && p.phase() == Phase::kDisarmed);
+}
+
+static void test_zero_delays_and_log() {
+  Timing t = quick(); t.exit_delay_s = 0; t.entry_delay_s = 0;
+  Panel p(t, house(), "1234");
+  CHECK(p.arm(Mode::kAway, false, 0) == Refusal::kNone && p.phase() == Phase::kArmed);
+  p.set_zone("front-door", ZoneState::kTriggered, 1000);
+  CHECK(p.phase() == Phase::kAlarm);                                       // no entry delay: alarm at once
+  // the log keeps the last hundred events
+  Panel q(quick(), house(), "1234");
+  for (int i = 0; i < 150; ++i) q.disarm("0", static_cast<std::uint64_t>(i) * 100000);   // each pair of wrong PINs... three lock out: plenty of events
+  CHECK(q.events().size() <= Panel::kMaxEvents && !q.events().empty());
+  CHECK(std::string(phase_text(Phase::kEntryDelay)) == "entry_delay" && std::string(refusal_text(Refusal::kZonesOpen)) == "zones_open" && std::string(refusal_text(Refusal::kLockedOut)) == "locked_out");
+}
+
+// ---- a long random run ---------------------------------------------------------------------------------------------------------------
+
+// Whatever happens, these must always hold: a siren means an alarm; an alarm only ends with a right PIN; a disarmed panel is quiet unless an always-zone or a tamper made it ring; a wrong PIN
+// never disarms; the entry delay never lets more than its time pass.
+static void test_random() {
+  std::mt19937 rng(20260);
+  const std::vector<Zone> zones = house();
+  const char* ids[] = {"front-door", "window", "hall-motion", "smoke", "nope"};
+  for (int round = 0; round < 60; ++round) {
+    Timing t; t.exit_delay_s = static_cast<std::uint32_t>(rng() % 20); t.entry_delay_s = static_cast<std::uint32_t>(rng() % 20); t.siren_max_s = 1 + static_cast<std::uint32_t>(rng() % 100);
+    t.lockout_after = 1 + static_cast<std::uint32_t>(rng() % 4); t.lockout_s = 1 + static_cast<std::uint32_t>(rng() % 60);
+    Panel p(t, zones, "4321");
+    std::uint64_t now = 0;
+    bool forced_alarm_source = false;   // an always-zone or a tamper was fed since the last disarm
+    std::uint64_t entry_since = 0;
+    bool in_entry = false;
+    for (int step = 0; step < 3000; ++step) {
+      now += rng() % 4000;
+      const Phase before = p.phase();
+      const bool was_siren = p.siren();
+      switch (rng() % 7) {
+        case 0: case 1: {
+          const std::string id = ids[rng() % 5];
+          const ZoneState state = static_cast<ZoneState>(rng() % 3);
+          if (state == ZoneState::kTamper || id == "smoke") forced_alarm_source = forced_alarm_source || state != ZoneState::kNormal;
+          p.set_zone(id, state, now);
+          break;
+        }
+        case 2: p.arm(static_cast<Mode>(1 + rng() % 2), rng() % 2 == 0, now); break;
+        case 3: {
+          const bool right = rng() % 3 == 0;
+          const Refusal r = p.disarm(right ? "4321" : "0000", now);
+          if (!right) { CHECK(r == Refusal::kBadPin || r == Refusal::kLockedOut); CHECK(before == Phase::kDisarmed || p.phase() != Phase::kDisarmed); }   // a wrong PIN never disarms
+          if (r == Refusal::kNone && right) forced_alarm_source = false;
+          break;
+        }
+        default: p.tick(now); break;
+      }
+      p.tick(now);
+      // a siren means an alarm
+      CHECK(!p.siren() || p.phase() == Phase::kAlarm);
+      // an alarm only ends through a disarm: leaving the alarm phase means disarmed
+      if (before == Phase::kAlarm) CHECK(p.phase() == Phase::kAlarm || p.phase() == Phase::kDisarmed);
+      // a siren that was off in an alarm does not come back on by itself
+      if (before == Phase::kAlarm && !was_siren && p.phase() == Phase::kAlarm) CHECK(!p.siren());
+      // a disarmed, quiet history of the always-zones and tampers means no alarm
+      if (!forced_alarm_source && p.phase() == Phase::kDisarmed) CHECK(!p.siren());
+      // the entry delay never runs past its time (ticked every step, so within one tick)
+      if (p.phase() == Phase::kEntryDelay) { if (!in_entry) { in_entry = true; entry_since = now; } CHECK(now - entry_since <= static_cast<std::uint64_t>(t.entry_delay_s) * 1000ULL + 1); }
+      else in_entry = false;
+      // the exit delay and the lockout are consistent with the mode
+      if (p.phase() == Phase::kDisarmed) CHECK(p.mode() == Mode::kDisarmed);
+      if (p.phase() == Phase::kExitDelay || p.phase() == Phase::kArmed || p.phase() == Phase::kEntryDelay) CHECK(p.mode() != Mode::kDisarmed);
+    }
+  }
+}
+
+int main() {
+  test_loop();
+  test_zone_names();
+  test_debounce();
+  test_arm_and_disarm();
+  test_instant_zone();
+  test_entry_delay();
+  test_exit_delay();
+  test_modes();
+  test_always_zones_and_tamper();
+  test_open_zones_at_arming();
+  test_pin_and_lockout();
+  test_siren_times_out();
+  test_zero_delays_and_log();
+  test_random();
+  std::printf("%d checks, %d failures\n", checks, failures);
+  return failures == 0 ? 0 : 1;
+}
