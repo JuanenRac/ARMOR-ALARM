@@ -17,8 +17,10 @@ extern "C" {
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 }
+#include "core/local_zigbee.hpp"
 #include "mqtt_link.hpp"
 #include "relay_outputs.hpp"
+#include "zigbee_bridge.hpp"
 
 namespace armor::manager {
 namespace {
@@ -36,6 +38,53 @@ int g_siren_relay = -1;
 bool g_siren_on = false;
 std::string g_last_signature;
 std::uint64_t g_last_publish_ms = 0;
+
+// The node speaking Zigbee itself while the radio is its own (see zigbee_bridge.hpp): the bridge's task drives it; the alarm task takes what the sensors said out of it and tells it when the siren
+// is on. It has its own lock because those are two tasks.
+class ZigbeeHost : public zigbee_bridge::LocalHost {
+ public:
+  explicit ZigbeeHost(const config::Settings& settings) : z_(sensors_of(settings), sirens_of(settings)) {}
+  void begin(std::uint64_t now_ms) override { std::lock_guard<std::mutex> guard(m_); active_ = true; pending_.clear(); z_.begin(now_ms); }
+  void end() override { std::lock_guard<std::mutex> guard(m_); active_ = false; pending_.clear(); z_.end(); }
+  void feed(const std::uint8_t* bytes, std::size_t count, std::uint64_t now_ms) override { std::lock_guard<std::mutex> guard(m_); z_.feed(bytes, count, now_ms); }
+  void tick(std::uint64_t now_ms) override { std::lock_guard<std::mutex> guard(m_); z_.tick(now_ms); }
+  std::size_t take_output(std::uint8_t* out, std::size_t capacity) override {
+    std::lock_guard<std::mutex> guard(m_);
+    const std::vector<std::uint8_t> more = z_.take_output();
+    pending_.insert(pending_.end(), more.begin(), more.end());
+    const std::size_t count = pending_.size() < capacity ? pending_.size() : capacity;
+    for (std::size_t i = 0; i < count; ++i) out[i] = pending_[i];
+    pending_.erase(pending_.begin(), pending_.begin() + static_cast<std::ptrdiff_t>(count));
+    return count;
+  }
+  std::vector<zigbee::ZoneUpdate> updates() { std::lock_guard<std::mutex> guard(m_); return z_.take_updates(); }
+  bool ready() { std::lock_guard<std::mutex> guard(m_); return active_ && z_.ready(); }
+  void siren(bool on, unsigned seconds) { std::lock_guard<std::mutex> guard(m_); if (active_ && z_.ready()) z_.siren(on, static_cast<std::uint16_t>(seconds > 65535 ? 65535 : seconds)); }
+
+ private:
+  static std::vector<zigbee::SensorConfig> sensors_of(const config::Settings& s) {
+    std::vector<zigbee::SensorConfig> out;
+    for (const config::ZoneSetting& zone : s.zones) {
+      std::uint64_t ieee = 0;
+      if (zone.enabled && zone.is_zigbee() && zigbee::parse_ieee(zone.zigbee, ieee)) out.push_back({zone.id, ieee});
+    }
+    return out;
+  }
+  static std::vector<zigbee::SirenConfig> sirens_of(const config::Settings& s) {
+    std::vector<zigbee::SirenConfig> out;
+    for (const std::string& text : s.zigbee_local.sirens) {
+      std::uint64_t ieee = 0;
+      if (!text.empty() && zigbee::parse_ieee(text, ieee)) out.push_back({ieee});
+    }
+    return out;
+  }
+  std::mutex m_;
+  zigbee::LocalZigbee z_;
+  std::vector<std::uint8_t> pending_;
+  bool active_ = false;
+};
+std::unique_ptr<ZigbeeHost> g_host;
+bool g_zigbee_siren_told = false;
 
 std::uint64_t now_ms() { return static_cast<std::uint64_t>(esp_timer_get_time()) / 1000ULL; }
 std::uint64_t stamp_ms() { return mqtt_link::clock_is_set() ? mqtt_link::wall_clock_ms() : now_ms(); }
@@ -84,7 +133,7 @@ void alarm_task(void*) {
   std::array<adc_cali_handle_t, config::kZoneCount> calibration{};
   std::array<bool, config::kZoneCount> ready{};
   bool any_zone = false;
-  for (const config::ZoneSetting& zone : g_settings.zones) any_zone = any_zone || zone.enabled;
+  for (const config::ZoneSetting& zone : g_settings.zones) any_zone = any_zone || (zone.enabled && !zone.is_zigbee());   // a Zigbee zone has no pin
   if (any_zone) {
     if (adc_oneshot_new_unit(&unit_config, &unit) != ESP_OK) {
       ESP_LOGE(kTag, "the converter could not be started: the zones are not read");
@@ -94,7 +143,7 @@ void alarm_task(void*) {
     } else {
       for (std::size_t i = 0; i < config::kZoneCount; ++i) {
         const config::ZoneSetting& zone = g_settings.zones[i];
-        if (!zone.enabled) continue;
+        if (!zone.enabled || zone.is_zigbee()) continue;
         const adc_channel_t channel = static_cast<adc_channel_t>(board::adc1_channel(zone.pin));
         adc_oneshot_chan_cfg_t channel_config{};
         channel_config.atten = ADC_ATTEN_DB_12;
@@ -113,7 +162,7 @@ void alarm_task(void*) {
     std::array<bool, config::kZoneCount> read{};
     if (unit != nullptr) {
       for (std::size_t i = 0; i < config::kZoneCount; ++i) {
-        if (!g_settings.zones[i].enabled || !ready[i]) continue;
+        if (!g_settings.zones[i].enabled || g_settings.zones[i].is_zigbee() || !ready[i]) continue;
         const adc_channel_t channel = static_cast<adc_channel_t>(board::adc1_channel(g_settings.zones[i].pin));
         long sum = 0;
         int taken = 0;
@@ -126,6 +175,11 @@ void alarm_task(void*) {
     }
     std::lock_guard<std::mutex> guard(g_lock);
     for (std::size_t i = 0; i < config::kZoneCount; ++i) if (read[i]) g_runner->feed(i, millivolts[i], now);
+    if (g_host) {
+      for (const zigbee::ZoneUpdate& update : g_host->updates()) g_runner->feed_zigbee(update.zone_id, update.state, update.battery_low, now);
+      if (!g_host->ready()) g_zigbee_siren_told = false;                    // a radio that is not ours cannot be told anything; it is told again when it is
+      else if (g_siren_on != g_zigbee_siren_told) { g_host->siren(g_siren_on, g_settings.panel.timing.siren_max_s); g_zigbee_siren_told = g_siren_on; }
+    }
     g_runner->tick(now);
     drive_siren_locked();
     publish_state_locked(false);
@@ -139,6 +193,11 @@ void start(const config::Settings& settings, Publish publish) {
   g_runner = std::make_unique<alarm::Runner>(settings);
   g_siren_relay = settings.panel.siren_relay.empty() ? -1 : relay_outputs::index_of(settings.panel.siren_relay);
   if (!settings.panel.siren_relay.empty() && g_siren_relay < 0) ESP_LOGE(kTag, "the siren relay \"%s\" is not an enabled relay: there is no siren", settings.panel.siren_relay.c_str());
+  if (settings.zigbee_local.after_s != 0 && settings.zigbee.enabled) {
+    g_host = std::make_unique<ZigbeeHost>(settings);
+    zigbee_bridge::set_local_host(g_host.get(), static_cast<unsigned>(settings.zigbee_local.after_s));
+    ESP_LOGI(kTag, "the node takes the Zigbee radio itself after %d s without the server's client", settings.zigbee_local.after_s);
+  }
   if (settings.server.commands) {
     mqtt_link::subscribe(alarm::topic(settings.node_id, "command"), on_command);
     ESP_LOGI(kTag, "the server may arm and disarm the panel (armor/alarm/%s/command)", settings.node_id.c_str());

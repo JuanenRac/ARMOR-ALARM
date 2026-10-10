@@ -140,7 +140,7 @@ std::string zones_json() {
   w.key("zones").begin_array();
   for (const alarm::ZoneView& zone : manager::zones()) {
     w.begin_object().field("zone", static_cast<int>(zone.number)).field("enabled", zone.enabled).field("id", zone.id).field("name", zone.name).field("kind", alarm::kind_text(zone.kind))
-        .field("state", alarm::state_text(zone.state)).field("bypassed", zone.bypassed).field("has_reading", zone.has_reading).key("millivolts").number(zone.millivolts, 0).end_object();
+        .field("state", alarm::state_text(zone.state)).field("bypassed", zone.bypassed).field("has_reading", zone.has_reading).key("millivolts").number(zone.millivolts, 0).field("zigbee", zone.zigbee).field("battery_low", zone.battery_low).end_object();
   }
   w.end_array().key("catalog").begin_array();
   for (int gpio = board::kFirstGpio; gpio <= board::kLastGpio; ++gpio) {

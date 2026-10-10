@@ -35,6 +35,6 @@ A wired loop gives four states on one pin: below `short_below` the loop is short
 
 ## What is still to do
 
-- **The Zigbee stack** the panel needs to take the radio over while the server is away (below and in [FAILOVER.md](FAILOVER.md)): the bridge only hands the line over today.
+- **A real coordinator and real sensors:** the node's own Zigbee conversation ([FAILOVER.md](FAILOVER.md)) is written and tested against a stand-in, and has never talked to a radio.
 - **The server, Studio and the Android client** reading the messages (they are in ARMOR-COMMON's contract, version 0).
 - **Hardware:** the base board populated for alarm, the wired zones on the analog pins, a siren relay and a way to arm and disarm on the spot ([HARDWARE.md](HARDWARE.md) is a proposal, untried).

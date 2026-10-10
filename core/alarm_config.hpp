@@ -18,6 +18,7 @@
 #include "board_s3.hpp"
 #include "config_common.hpp"
 #include "io_config.hpp"
+#include "local_zigbee.hpp"
 #include "node_settings.hpp"
 
 namespace armor::config {
@@ -29,9 +30,18 @@ struct ZoneSetting {
   bool enabled = false;
   std::string id;           // lowercase letters, digits, - and _ : what the zone is called in the messages
   std::string name;         // what a person calls it ("Front door")
-  int pin = -1;
+  int pin = -1;             // wired: the analog pin of its loop
+  std::string zigbee;       // a Zigbee sensor instead: its long (IEEE) address as 16 hexadecimal digits; the pin is then not used
   alarm::ZoneKind kind = alarm::ZoneKind::kInstant;
   int hold_ms = 200;
+  bool is_zigbee() const { return !zigbee.empty(); }
+};
+
+// The node taking the radio over: after the server's Zigbee2MQTT has been away for `after_s` seconds (0: never) the node speaks Zigbee itself, reads the sensors of the zones that name one and
+// commands the sirens listed here (long addresses). It needs the radio's bridge (zigbee.enabled). Back to the server the moment its client connects again.
+struct ZigbeeLocal {
+  int after_s = 0;
+  std::array<std::string, 4> sirens;
 };
 
 // The panel: its delays, the PIN and which relay is the siren (a relay of the base board, by its name; empty: no siren).
@@ -52,6 +62,7 @@ struct Settings : NodeSettings, IoSettings {
   alarm::LoopLimits loop;
   PanelSetting panel;
   ServerLink server;
+  ZigbeeLocal zigbee_local;
 };
 
 // ---- the defaults of a node that has never been configured ---------------------------------------------------------------------
@@ -91,6 +102,7 @@ inline void read_settings(const json::Value& document, Settings& s, Problems& pr
       read_text(item, "id", zone.id, 32, base + "id", problems);
       read_text(item, "name", zone.name, 40, base + "name", problems);
       read_int(item, "pin", zone.pin, -1, board::kLastGpio, base + "pin", problems);
+      read_text(item, "zigbee", zone.zigbee, 16, base + "zigbee", problems);
       read_int(item, "hold_ms", zone.hold_ms, 20, 5000, base + "hold_ms", problems);
       if (const json::Value* kind = item.get("kind"); kind != nullptr) {
         if (!kind->is_string() || !alarm::parse_kind(kind->text, zone.kind)) bad(problems, base + "kind", "invalid");
@@ -113,6 +125,19 @@ inline void read_settings(const json::Value& document, Settings& s, Problems& pr
     read_secret(*panel, "pin", s.panel.pin, "panel.pin", problems);
     read_text(*panel, "siren_relay", s.panel.siren_relay, 32, "panel.siren_relay", problems);
   }
+  if (const json::Value* local = document.get("zigbee_local"); local != nullptr && local->is_object()) {
+    read_int(*local, "after_s", s.zigbee_local.after_s, 0, 3600, "zigbee_local.after_s", problems);
+    if (const json::Value* sirens = local->get("sirens"); sirens != nullptr) {
+      if (!sirens->is_array() || sirens->items.size() > s.zigbee_local.sirens.size()) bad(problems, "zigbee_local.sirens", "invalid");
+      else {
+        for (std::string& siren : s.zigbee_local.sirens) siren.clear();
+        for (std::size_t i = 0; i < sirens->items.size(); ++i) {
+          if (!sirens->items[i].is_string()) { bad(problems, "zigbee_local.sirens." + std::to_string(i), "invalid"); continue; }
+          s.zigbee_local.sirens[i] = sirens->items[i].text;
+        }
+      }
+    }
+  }
   if (const json::Value* server = document.get("server"); server != nullptr && server->is_object()) read_bool(*server, "commands", s.server.commands, "server.commands", problems);
 }
 
@@ -133,6 +158,7 @@ inline Problems validate(const Settings& s) {
 
   // the zones: each has its own name and its own analog pin
   std::vector<std::string> ids;
+  std::vector<std::uint64_t> addresses;
   std::size_t enabled = 0;
   for (std::size_t i = 0; i < kZoneCount; ++i) {
     const ZoneSetting& zone = s.zones[i];
@@ -144,6 +170,14 @@ inline Problems validate(const Settings& s) {
     else ids.push_back(zone.id);
     std::size_t characters = 0;
     if (!zone.name.empty() && (!net::valid_utf8(zone.name, &characters) || characters > 40)) bad(problems, base + "name", "invalid");
+    if (zone.is_zigbee()) {
+      std::uint64_t ieee = 0;
+      if (!zigbee::parse_ieee(zone.zigbee, ieee)) bad(problems, base + "zigbee", "invalid");
+      else if (std::find(addresses.begin(), addresses.end(), ieee) != addresses.end()) bad(problems, base + "zigbee", "conflict");
+      else addresses.push_back(ieee);
+      if (s.zigbee_local.after_s == 0) bad(problems, base + "zigbee", "needs_local");
+      continue;
+    }
     if (zone.pin < 0) bad(problems, base + "pin", "required");
     else if (!board::analog_capable(zone.pin)) bad(problems, base + "pin", board::assignable(zone.pin) ? "not_analog" : "reserved");
     else if (!claims.claim(zone.pin, "zone" + std::to_string(i + 1))) bad(problems, base + "pin", "conflict");
@@ -159,6 +193,11 @@ inline Problems validate(const Settings& s) {
     if (!found) bad(problems, "panel.siren_relay", "unknown_relay");
   }
   if (s.server.commands && !s.mqtt.enabled) bad(problems, "server.commands", "needs_broker");
+  if (s.zigbee_local.after_s != 0 && (s.zigbee_local.after_s < 10 || !s.zigbee.enabled)) bad(problems, "zigbee_local.after_s", s.zigbee.enabled ? "range" : "needs_zigbee");
+  for (std::size_t i = 0; i < s.zigbee_local.sirens.size(); ++i) {
+    std::uint64_t ieee = 0;
+    if (!s.zigbee_local.sirens[i].empty() && !zigbee::parse_ieee(s.zigbee_local.sirens[i], ieee)) bad(problems, "zigbee_local.sirens." + std::to_string(i), "invalid");
+  }
   return problems;
 }
 
@@ -171,7 +210,7 @@ inline std::string to_json(const Settings& s, bool secrets) {
   node_write_head(w, s, secrets);
   w.key("zones").begin_array();
   for (const ZoneSetting& zone : s.zones) {
-    w.begin_object().field("enabled", zone.enabled).field("id", zone.id).field("name", zone.name).field("pin", zone.pin).field("kind", alarm::kind_text(zone.kind)).field("hold_ms", zone.hold_ms).end_object();
+    w.begin_object().field("enabled", zone.enabled).field("id", zone.id).field("name", zone.name).field("pin", zone.pin).field("zigbee", zone.zigbee).field("kind", alarm::kind_text(zone.kind)).field("hold_ms", zone.hold_ms).end_object();
   }
   w.end_array();
   w.key("loop").begin_object().key("short_below_mv").number(s.loop.short_below_mv).key("normal_below_mv").number(s.loop.normal_below_mv).key("triggered_below_mv").number(s.loop.triggered_below_mv).end_object();
@@ -181,6 +220,9 @@ inline std::string to_json(const Settings& s, bool secrets) {
   if (secrets) w.field("pin", s.panel.pin); else w.field("pin_set", !s.panel.pin.empty());
   w.end_object();
   w.key("server").begin_object().field("commands", s.server.commands).end_object();
+  w.key("zigbee_local").begin_object().field("after_s", s.zigbee_local.after_s).key("sirens").begin_array();
+  for (const std::string& siren : s.zigbee_local.sirens) if (!siren.empty()) w.string(siren);
+  w.end_array().end_object();
   io_write(w, s);
   node_write_tail(w, s);
   w.end_object();

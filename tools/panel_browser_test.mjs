@@ -132,6 +132,21 @@ try {
   await goto("zigbee");
   body = await text();
   check("the Zigbee page has the radio card and the lines for Zigbee2MQTT", body.includes("Zigbee radio") && body.includes("tcp://192.168.0.181:8888") && body.includes("Fallback client"), body.slice(0, 300));
+  check("the Zigbee page offers the node taking the radio itself", body.includes("The node takes the radio itself") && body.includes("Zigbee sirens"), body.slice(0, 300));
+  // a Zigbee zone needs the time the node takes the radio: refused first, saved once it is set
+  await goto("zones");
+  await ev(`(() => { const c = [...document.querySelectorAll('section.card')].find(x => x.querySelector('h2')?.textContent.startsWith('Zone 3')); const i = c.querySelector('input[placeholder="00158d0001a2b3c4"]'); i.value = '00158d0001a2b3c4'; i.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await clickButton("Save"); await sleep(900);
+  check("a Zigbee zone is refused while the node never takes the radio", (await text()).includes("set the time the node takes the radio first"), (await text()).slice(0, 200));
+  await goto("zigbee");
+  await setText("input[type=number][min='0'][max='3600']", "60");
+  await ev(`(() => { const t = document.querySelector('textarea'); t.value = '00158d0001ffee01'; t.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await goto("zones");
+  await clickButton("Save"); await sleep(900);
+  const savedZb = await (await fetch("http://127.0.0.1:18122/api/v1/config", { headers: { Cookie: cookie } })).json();
+  check("with the time set the Zigbee zone and the siren are saved", savedZb.config.zigbee_local.after_s === 60 && savedZb.config.zigbee_local.sirens[0] === "00158d0001ffee01" && savedZb.config.zones[2].zigbee === "00158d0001a2b3c4", JSON.stringify(savedZb.config.zigbee_local));
+  await goto("zones");
+  check("a Zigbee zone says it has not been heard", (await text()).includes("not heard yet"), (await text()).slice(0, 200));
   await goto("io");
   body = await text();
   check("the relays page has the siren note, the broker switch and eight relays", body.includes("is the siren") && body.includes("Let the broker move the relays") && [1, 2, 8].every(n => body.includes(`Relay ${n}`)) && !body.includes("Analog inputs"), body.slice(0, 300));

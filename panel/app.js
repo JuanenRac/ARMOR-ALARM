@@ -418,7 +418,7 @@ function claimedGpios(exceptPath) {
   const z = S.cfg.zigbee;
   if (z && z.enabled) { add("zigbee.rx", z.rx); add("zigbee.tx", z.tx); add("zigbee.reset", z.reset); add("zigbee.bootloader", z.bootloader); }
   (S.cfg.relays || []).forEach((r, i) => { if (r.enabled) add("relays." + i + ".pin", r.pin); });
-  (S.cfg.zones || []).forEach((z, i) => { if (z.enabled) add("zones." + i + ".pin", z.pin); });
+  (S.cfg.zones || []).forEach((z, i) => { if (z.enabled && !z.zigbee) add("zones." + i + ".pin", z.pin); });
   return used;
 }
 function pinOptions(selected, includeNone, exceptPath) {
@@ -449,6 +449,18 @@ async function radioAction(action) {
   await refreshLive(); render();
 }
 
+// The sirens' long addresses are edited as one per line; they are kept as a list in the settings.
+function sirensArea() {
+  const list = (S.cfg.zigbee_local && S.cfg.zigbee_local.sirens) || [];
+  const area = el("textarea", { rows: 3, maxLength: 80, spellcheck: false, placeholder: "00158d0001ffee01" }, list.join("\n"));
+  area.oninput = () => {
+    setValue("zigbee_local.sirens", area.value.split(/\s+/).filter(Boolean).slice(0, 4));
+  };
+  const bad = Object.keys(S.problems || {}).find(k => k.indexOf("zigbee_local.sirens") === 0);
+  if (bad) area.classList.add("bad");
+  return [area, bad ? el("span", { class: "err" }, problemText(S.problems[bad])) : null];
+}
+
 function zigbeePage() {
   const z = zbStatus(), cfg = S.cfg.zigbee;
   const ip = S.status && S.status.network && S.status.network.ip;
@@ -462,6 +474,9 @@ function zigbeePage() {
           el("div", { class: "row" }, field("zbBaud", "zigbee.baud", { type: "select", number: true, options: ZIGBEE_BAUDS.map(b => [b, String(b)]) }), field("zbPort", "zigbee.port", { type: "number", min: 1024, max: 65535 })),
           field("zbAllowed", "zigbee.allowed_client", { max: 15, placeholder: "192.168.0.180", hint: t("zbAllowedHint") }),
           el("div", { class: "row" }, field("zbFallback", "zigbee.fallback_client", { max: 15, placeholder: "192.168.0.60", hint: t("zbFallbackHint") }), field("zbFallbackAfter", "zigbee.fallback_after_s", { type: "number", min: 5, max: 600 }))] : null),
+      cfg.enabled ? el("section", { class: "card" }, el("h2", {}, t("zbLocalTitle")), el("p", { class: "muted" }, t("zbLocalHint")),
+        field("zbLocalAfter", "zigbee_local.after_s", { type: "number", min: 0, max: 3600 }),
+        el("label", { class: "field" }, el("span", {}, t("zbLocalSirens")), sirensArea())) : null,
       z.enabled ? el("section", { class: "card" }, el("h2", {}, t("zbStatus")),
         el("div", { class: "actions" }, el("span", { id: "zb-pill" }, zbPill(z.state)), el("span", { class: "muted", id: "zb-live" }, zbLiveText(z))),
         el("p", { class: "muted", id: "zb-client" }, zbClientText(z)),
@@ -547,6 +562,7 @@ function alarmPage() {
 
 const zoneInfo = index => (S.zonesData && S.zonesData.zones && S.zonesData.zones[index]) || { enabled: false };
 const zonePinOptions = (selected, exceptPath) => pinOptions(selected, true, exceptPath).filter(([gpio]) => gpio === -1 || (gpio >= 1 && gpio <= 10));
+const zoneLiveText = z => (z.zigbee ? (z.has_reading ? t("zoneLiveZigbee", z.battery_low ? "⚠ " + t("zs_" + z.state) : t("zs_" + z.state)) : t("zoneZigbeeWaiting")) : (z.has_reading ? t("zoneLive", Math.round(z.millivolts)) : t("zoneNoReading")));
 const ZONE_KINDS = ["instant", "entry", "interior", "always"];
 
 function zoneCard(index) {
@@ -555,10 +571,11 @@ function zoneCard(index) {
     field("zoneEnabled", base + "enabled", { type: "checkbox", rerender: true }),
     cfg.enabled ? [
       el("div", { class: "row" }, field("zoneId", base + "id", { max: 32, hint: t("meterChannelHint") }), field("zoneName", base + "name", { max: 40 })),
-      el("div", { class: "row" }, field("zonePin", base + "pin", { type: "select", number: true, options: zonePinOptions(cfg.pin, base + "pin") }),
+      field("zoneZigbee", base + "zigbee", { max: 16, placeholder: "00158d0001a2b3c4", hint: t("zoneZigbeeHint") }),
+      el("div", { class: "row" }, cfg.zigbee ? null : field("zonePin", base + "pin", { type: "select", number: true, options: zonePinOptions(cfg.pin, base + "pin") }),
         field("zoneKind", base + "kind", { type: "select", options: ZONE_KINDS.map(k => [k, t("zk_" + k)]) })),
       field("zoneHold", base + "hold_ms", { type: "number", min: 20, max: 5000, hint: t("zoneHoldHint") }),
-      live.enabled ? el("div", { class: "actions" }, el("span", { id: "zone-pill-" + index }, zonePill(live.state, live.bypassed)), el("span", { class: "muted", id: "zone-live-" + index }, live.has_reading ? t("zoneLive", Math.round(live.millivolts)) : t("zoneNoReading"))) : null] : null);
+      live.enabled ? el("div", { class: "actions" }, el("span", { id: "zone-pill-" + index }, zonePill(live.state, live.bypassed)), el("span", { class: "muted", id: "zone-live-" + index }, zoneLiveText(live))) : null] : null);
 }
 
 function zonesPage() {
@@ -793,7 +810,7 @@ async function poll() {
 function patchLive() {
   ((S.zonesData && S.zonesData.zones) || []).forEach((z, i) => {
     const text = document.getElementById("zone-live-" + i), pill = document.getElementById("zone-pill-" + i);
-    if (text) text.textContent = z.has_reading ? t("zoneLive", Math.round(z.millivolts)) : t("zoneNoReading");
+    if (text) text.textContent = zoneLiveText(z);
     if (pill) pill.replaceChildren(zonePill(z.state, z.bypassed));
   });
   if (S.io) {

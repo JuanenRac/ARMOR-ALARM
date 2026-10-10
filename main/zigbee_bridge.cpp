@@ -7,7 +7,10 @@
 // The radio's reset and boot lines are driven open-drain: low, or let go - the module has its own pull-ups, so the node never fights them.
 #include "zigbee_bridge.hpp"
 
+#include "core/radio_owner.hpp"
+
 #include <cstring>
+#include <atomic>
 #include <memory>
 #include <mutex>
 extern "C" {
@@ -35,6 +38,10 @@ zigbee::Status g_status;
 config::ZigbeeSetting g_setting;
 std::mutex g_radio_lock;   // one reset at a time
 std::unique_ptr<zigbee::Arbiter> g_arbiter;   // only the bridge's task touches it
+LocalHost* g_host = nullptr;
+unsigned g_local_after_s = 0;
+std::unique_ptr<zigbee::RadioOwner> g_owner;   // only the bridge's task touches it
+std::atomic<bool> g_local{false};
 
 std::uint64_t now_ms() { return static_cast<std::uint64_t>(esp_timer_get_time()) / 1000ULL; }
 
@@ -176,9 +183,33 @@ void bridge_task(void*) {
         }
       }
     }
+    // who holds the radio: the client, or the node itself once no client has been there for the time the settings say
+    if (g_owner && g_host) {
+      const bool mine = g_owner->update(client >= 0, now_ms()) == zigbee::RadioOwner::Owner::kNode;
+      if (mine != g_local.load()) {
+        g_local = mine;
+        if (mine) {
+          uart_flush_input(kUart);
+          g_host->begin(now_ms());
+          set_state("local");
+          ESP_LOGW(kTag, "no client for %u s: the node holds the Zigbee radio itself", g_local_after_s);
+        } else {
+          g_host->end();
+          ESP_LOGW(kTag, "a client is back: the node lets the Zigbee radio go");
+        }
+      }
+      if (mine) {
+        g_host->tick(now_ms());
+        std::uint8_t out[256];
+        const std::size_t count = g_host->take_output(out, sizeof out);
+        if (count > 0) uart_write_bytes(kUart, out, count);
+      }
+    }
     const int n = uart_read_bytes(kUart, buffer, sizeof buffer, 0);
     if (n > 0) {
-      if (client >= 0) {
+      if (g_local.load() && g_host != nullptr && client < 0) {
+        g_host->feed(buffer, static_cast<std::size_t>(n), now_ms());
+      } else if (client >= 0) {
         if (send_all(client, buffer, static_cast<std::size_t>(n))) {
           std::lock_guard<std::mutex> guard(g_lock);
           g_status.from_radio += static_cast<std::uint64_t>(n);
@@ -199,6 +230,7 @@ void start(const config::IoSettings& settings) {
   g_setting = settings.zigbee;
   if (!g_setting.enabled) return;
   g_arbiter = std::make_unique<zigbee::Arbiter>(static_cast<std::uint64_t>(g_setting.fallback_after_s) * 1000ULL, now_ms());
+  if (g_host != nullptr && g_local_after_s != 0) g_owner = std::make_unique<zigbee::RadioOwner>(static_cast<std::uint64_t>(g_local_after_s) * 1000ULL, now_ms());
   {
     std::lock_guard<std::mutex> guard(g_lock);
     g_status.state = "starting";
@@ -212,6 +244,9 @@ void start(const config::IoSettings& settings) {
 }
 
 zigbee::Status status() { std::lock_guard<std::mutex> guard(g_lock); return g_status; }
+
+void set_local_host(LocalHost* host, unsigned after_s) { g_host = host; g_local_after_s = after_s; }
+bool local_active() { return g_local.load(); }
 
 bool reset_radio(bool bootloader) {
   if (!g_setting.enabled || g_setting.reset < 0 || (bootloader && g_setting.bootloader < 0)) return false;

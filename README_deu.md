@@ -26,7 +26,7 @@
 
 ---
 
-**Ehrlichkeitsprüfung - was heute läuft:** **Reifegrad: Scaffolding.** Der Kern (die Rahmen der Zähler PZEM-004T v3 und PZEM-017, der Bus, der sie abfragt, die Nachricht des Knotens und die Regeln fürs Schalten: 53 Prüfungen der Zähler und 135.736 der Schaltregeln) wird auf einem Rechner mit nachgebildeten Zählern und Schützen getestet, und die Nachrichten, die er erzeugt, akzeptiert ARMOR-COMMON. Die Firmware des Knotens (die Einstellungen, die serielle Leitung und die Seiten Zähler und Messwerte ihres Panels: 71 weitere Prüfungen) baut im ESP-IDF-5.4.2-Container für beide Platinen. **Sie lief noch nie auf einer Platine, nichts wurde an einen Zähler, ein Schütz, ein Relais oder das Funkmodul angeschlossen, und hier schaltet nichts von selbst irgendetwas.**
+**Ehrlichkeitsprüfung - was heute läuft:** **Reifegrad: Scaffolding.** Es gibt den **Kern der Alarmanlage** (was eine Zone ist, wie eine vom ADC gelesene verdrahtete Schleife zum Zustand wird, die Regeln der Zentrale: Scharfschalten, Verzögerungen, der Alarm, die Sirene, die PIN mit Sperre) und die darauf gebaute **Firmware des Knotens** (Einstellungen, Webpanel, Nachrichten mit dem Server, Brücke des Zigbee-Funks und Relais), die für beide Platinen kompiliert; der Kern, die Einstellungen, die Nachrichten und das Panel in einem echten Browser gegen einen Stellvertreterknoten sind auf einem Rechner mit 492.368 Prüfungen getestet. **Nichts lief auf einer Platine oder in einer echten Anlage, keine Zone wurde verdrahtet und keine Sirene angeschlossen, die eigene Zigbee-Kommunikation des Knotens mit einem Koordinator (das Funkmodul vom Server übernehmen) ist geschrieben und gegen einen simulierten Koordinator getestet, aber nie mit einem echten Koordinator oder echten Sensoren gelaufen, und dies ist keine zertifizierte Alarmanlage.**
 
 ---
 
@@ -38,7 +38,7 @@
 * **Die PIN:** zum Scharfschalten ist keine nötig, zum Unscharfschalten und Stummschalten schon; falsche PINs werden gezählt, und nach einigen wird alles eine Weile abgelehnt, auch die richtige PIN.
 * **Der Plan:** ein Gateway auf der Platine des Elektroknotens (Zigbee-Funk, verdrahtete Zonen, Sirenenrelais), das mit ARMOR-SERVER arbeitet und **weiter überwacht, wenn der Server fehlt**: eine Zentrale übernimmt das Funkmodul vom Server über die Zigbee-Brücke von ARMOR-ELECTRICAL. Siehe [den Entwurf](docs/DESIGN.md) und [die Übernahme](docs/FAILOVER.md).
 * **Der Knoten:** Firmware für den ESP32-S3 (PoE-Ethernet oder WLAN) mit bis zu acht verdrahteten Zonen, der Sirene an einem Relais, dem Webpanel aller Knoten in sieben Sprachen, dem an Zigbee2MQTT verliehenen Zigbee-Funk und den Nachrichten `armor/alarm/<Knoten>/state|command|result`; der Server darf nur scharf- und unscharfschalten, wenn drei unabhängige Schalter es erlauben. Siehe [die Firmware](docs/NODE_FIRMWARE.md), [die Nachrichten](docs/ALARM_MESSAGES.md) und [die Hardware](docs/HARDWARE.md).
-* **Noch nicht:** der Zigbee-Stack, den die Zentrale zum Übernehmen des Funks vom Server braucht, die Hardware und jeder Test an einer echten Anlage.
+* **Funkmodul übernehmen:** ist Zigbee2MQTT des Servers eine festgelegte Zeit weg, startet der Knoten den Koordinator selbst (ZNP), liest die Sensoren der Zonen, die einen nennen (IAS Zone), und steuert Zigbee-Sirenen (IAS WD); er gibt es frei, sobald der Client zurück ist. **Noch nicht:** ein echter Koordinator oder Sensor, die Hardware und jeder Test an einer echten Anlage.
 
 ## 📂 Struktur des Repositorys
 
@@ -47,7 +47,7 @@ ARMOR-ALARM/
 ├── core/    alarm_zone, alarm_panel (the rules), alarm_config, alarm_message, alarm_runner (the node), plus the settings every node shares
 ├── main/    the ESP-IDF firmware: alarm_manager, the web server, the Zigbee bridge, the relays
 ├── panel/   the web panel (seven languages)
-├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract)
+├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract), test_zigbee (ZNP, IAS Zone and WD, the node's own conversation with a coordinator)
 ├── tools/   the stand-in node and the browser test of the panel
 ├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING
 └── images/  brand assets

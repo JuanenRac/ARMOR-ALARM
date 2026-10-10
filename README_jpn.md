@@ -26,7 +26,7 @@
 
 ---
 
-**正直さのチェック - 今日動いているもの：** **成熟度：scaffolding。** 存在するのは**警報のコア**（警戒区域とは何か、ADC が読む配線ループがどう状態になるか、警報盤のルール：警戒セット、遅延、警報、サイレン、ロックアウト付き PIN）と、その上に作られた**ノードのファームウェア**（設定、Web パネル、サーバーとのメッセージ、Zigbee 無線のブリッジとリレー）で、両方の基板向けにビルドできます。コア、設定、メッセージ、そして模擬ノードに対して実ブラウザで動かしたパネルは、コンピューターで 492,368 件のチェックを通過しています。**基板や実際の設備では動作しておらず、区域の配線もサイレンの接続もしておらず、警報盤がサーバーから無線を引き継ぐための Zigbee スタックは未作成で、認証された警報システムではありません。**
+**正直さのチェック - 今日動いているもの：** **成熟度：scaffolding。** 存在するのは**警報のコア**（警戒区域とは何か、ADC が読む配線ループがどう状態になるか、警報盤のルール：警戒セット、遅延、警報、サイレン、ロックアウト付き PIN）と、その上に作られた**ノードのファームウェア**（設定、Web パネル、サーバーとのメッセージ、Zigbee 無線のブリッジとリレー）で、両方の基板向けにビルドできます。コア、設定、メッセージ、そして模擬ノードに対して実ブラウザで動かしたパネルは、コンピューターで 492,368 件のチェックを通過しています。**基板や実際の設備では動作しておらず、区域の配線もサイレンの接続もしておらず、ノード自身がコーディネーターと行う Zigbee 通信（サーバーから無線を引き継ぐ）は作成済みで模擬コーディネーターに対してテスト済みですが、実機のコーディネーターやセンサーでは一度も動作しておらず、、認証された警報システムではありません。**
 
 ---
 
@@ -38,7 +38,7 @@
 * **PIN：** 警戒セットには不要、解除と消音には必要です。誤った PIN は数えられ、数回で一定時間すべて拒否されます（正しい PIN も）。
 * **計画：** 電気ノードの基板上のゲートウェイ（Zigbee 無線、配線区域、サイレン用リレー）。ARMOR-SERVER と連携し、**サーバーが不在でも警戒を続けます**：警報盤が ARMOR-ELECTRICAL の Zigbee ブリッジ経由でサーバーから無線を引き継ぎます。[設計](docs/DESIGN.md)と[引き継ぎ](docs/FAILOVER.md)を参照。
 * **ノード：** ESP32-S3 用ファームウェア（PoE イーサネットまたは Wi-Fi）。最大 8 つの配線区域、リレーに接続したサイレン、全ノード共通の 7 言語の Web パネル、Zigbee2MQTT に貸し出す Zigbee 無線、そしてメッセージ `armor/alarm/<ノード>/state|command|result`。サーバーが警戒セット・解除できるのは、独立した 3 つのスイッチがすべて許可した場合だけです。[ファームウェア](docs/NODE_FIRMWARE.md)、[メッセージ](docs/ALARM_MESSAGES.md)、[ハードウェア](docs/HARDWARE.md)を参照。
-* **まだ：** 警報盤がサーバーから無線を引き継ぐための Zigbee スタック、ハードウェア、実際の設備でのテスト。
+* **無線の引き継ぎ：** サーバーの Zigbee2MQTT が設定時間いないと、ノードが自分でコーディネーターを起動し（ZNP）、センサーを指定した区域を読み取り（IAS Zone）、Zigbee サイレンを制御し（IAS WD）、クライアントが戻った瞬間に手放します。**まだ：** 実機のコーディネーターやセンサー、ハードウェア、実際の設備でのテスト。
 
 ## 📂 リポジトリの構成
 
@@ -47,7 +47,7 @@ ARMOR-ALARM/
 ├── core/    alarm_zone, alarm_panel (the rules), alarm_config, alarm_message, alarm_runner (the node), plus the settings every node shares
 ├── main/    the ESP-IDF firmware: alarm_manager, the web server, the Zigbee bridge, the relays
 ├── panel/   the web panel (seven languages)
-├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract)
+├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract), test_zigbee (ZNP, IAS Zone and WD, the node's own conversation with a coordinator)
 ├── tools/   the stand-in node and the browser test of the panel
 ├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING
 └── images/  brand assets

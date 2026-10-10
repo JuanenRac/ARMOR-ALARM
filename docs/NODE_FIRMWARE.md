@@ -20,4 +20,4 @@ It has the web panel of every other node (set-up, login, users, Wi-Fi, broker, u
 - A zone whose pin cannot be read says nothing at all: a fault of the node is never taken for a tamper, so it cannot sound the siren by itself.
 - Arming needs no PIN; disarming and silencing do. The server may arm and disarm only when three independent settings allow it.
 - **Nothing here has run on a board**, no zone has been wired and no siren connected. The host tests (the zones, the panel, the settings, the messages and the runner) and the panel in a real browser against a stand-in node (`tools/panel_mock.mjs`, `tools/panel_browser_test.mjs`) are what has been done; the firmware builds for both boards.
-- **Not written yet:** the Zigbee stack the panel needs to take the radio over while the server is away ([FAILOVER.md](FAILOVER.md)); until then the fallback client of the bridge only hands the line over.
+- **Taking the radio over** while the server is away is written (core/local_zigbee.hpp, [FAILOVER.md](FAILOVER.md)) and has never run against a real coordinator or sensor; a separate panel reaching the nodes over HTTP when the broker is away too is not written.

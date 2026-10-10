@@ -27,6 +27,8 @@ struct ZoneView {
   bool bypassed = false;
   bool has_reading = false;
   double millivolts = 0;
+  bool zigbee = false;        // a Zigbee sensor, not a wired loop: it has no millivolts, and a reading only when the node holds the radio
+  bool battery_low = false;   // what a Zigbee sensor says of its battery
 };
 
 // The answer to a command from the server.
@@ -43,14 +45,14 @@ class Runner {
     for (std::size_t i = 0; i < config::kZoneCount; ++i) {
       ZoneView& view = views_[i];
       const config::ZoneSetting& zone = settings.zones[i];
-      view.number = i + 1; view.enabled = zone.enabled; view.id = zone.id; view.name = zone.name; view.kind = zone.kind;
+      view.number = i + 1; view.enabled = zone.enabled; view.zigbee = zone.is_zigbee(); view.id = zone.id; view.name = zone.name; view.kind = zone.kind;
       filters_[i] = Debouncer(static_cast<std::uint64_t>(zone.hold_ms));
     }
   }
 
   // The reading of zone `index` (0 to 7) in millivolts at its pin.
   void feed(std::size_t index, double millivolts, std::uint64_t now_ms) {
-    if (index >= config::kZoneCount || !views_[index].enabled) return;
+    if (index >= config::kZoneCount || !views_[index].enabled || views_[index].zigbee) return;
     ZoneView& view = views_[index];
     view.has_reading = true;
     view.millivolts = millivolts;
@@ -58,6 +60,18 @@ class Runner {
     view.state = stable;
     panel_.set_zone(view.id, stable, now_ms);
     view.bypassed = panel_.bypassed(view.id);
+  }
+
+  // What a Zigbee sensor said (the node holds the radio): the state of its zone. An update for a zone that is not a Zigbee one is ignored.
+  void feed_zigbee(const std::string& zone_id, ZoneState state, bool battery_low, std::uint64_t now_ms) {
+    for (ZoneView& view : views_) {
+      if (!view.enabled || !view.zigbee || view.id != zone_id) continue;
+      view.has_reading = true;
+      view.state = state;
+      view.battery_low = battery_low;
+      panel_.set_zone(view.id, state, now_ms);
+      view.bypassed = panel_.bypassed(view.id);
+    }
   }
 
   void tick(std::uint64_t now_ms) {

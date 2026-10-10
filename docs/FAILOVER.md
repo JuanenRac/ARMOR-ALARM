@@ -15,6 +15,10 @@
 - The **panel** (the alarm's brain when the server is away) may be a separate unit on Wi-Fi, with a keypad or a screen, a siren and a battery.
 - **One Zigbee network:** a single coordinator, with the other PoE nodes as routers that extend the mesh (to be confirmed with the real modules); several coordinators would be several networks.
 
+## The node takes the radio itself
+
+The simplest panel is the node: when the server's Zigbee2MQTT has not been connected to the bridge for the time set in the panel (*Take the radio after*), the node holds the radio itself and talks Zigbee to the coordinator (core/local_zigbee.hpp): it brings it up, reads the sensors of the zones that name one and commands the Zigbee sirens, feeding the same panel as the wired loops. The moment the server's client connects again the node lets go. This is written and tested against a stand-in coordinator; it has never run against a real one.
+
 ## The relay: the panel takes the radio over
 
 The bridge accepts two clients: the **primary** (the server running Zigbee2MQTT) and the **fallback** (the panel). The fallback is accepted only while the primary is not connected and has been away for a configurable time (30 seconds by default); the primary may always connect and takes the radio back. This is built and tested in ARMOR-ELECTRICAL (`zigbee.fallback_client`, `zigbee.fallback_after_s`).

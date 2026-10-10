@@ -35,10 +35,11 @@ const config = {
   ap: { enabled: true, ssid: "ARMOR-ALARM-A1B2C3", security: "wpa2", password_set: true, channel: 0, hidden: false, max_clients: 8, tx_power_dbm: 15, bandwidth_mhz: 20, country: "ES" },
   sta: { enabled: true, ssid: "HomeRouter", password_set: true, backup: [] },
   mqtt: { enabled: true, uri: "mqtt://192.168.0.180:18883", username: "alarm-node-alarm-a1b2c3", password_set: true, heartbeat_s: 10, ntp: "pool.ntp.org", backup: [] },
-  zones: Array.from({ length: 8 }, (_, i) => ({ enabled: i < 4, id: ["front-door", "window", "hall-motion", "smoke"][i] ?? `zone${i + 1}`, name: ["Front door", "Living room window", "Hall motion", "Kitchen smoke"][i] ?? "", pin: [1, 2, 4, 5, 6, 7, 3, -1][i], kind: ["entry", "instant", "interior", "always"][i] ?? "instant", hold_ms: 200 })),
+  zones: Array.from({ length: 8 }, (_, i) => ({ enabled: i < 4, id: ["front-door", "window", "hall-motion", "smoke"][i] ?? `zone${i + 1}`, name: ["Front door", "Living room window", "Hall motion", "Kitchen smoke"][i] ?? "", pin: [1, 2, 4, 5, 6, 7, 3, -1][i], kind: ["entry", "instant", "interior", "always"][i] ?? "instant", hold_ms: 200, zigbee: "" })),
   loop: { short_below_mv: 400, normal_below_mv: 1200, triggered_below_mv: 2400 },
   panel: { exit_delay_s: 10, entry_delay_s: 10, siren_max_s: 60, lockout_after: 3, lockout_s: 30, siren_relay: "siren", pin_set: true },
   server: { commands: false },
+  zigbee_local: { after_s: 0, sirens: [] },
   zigbee: { enabled: true, rx: 18, tx: 17, reset: 21, bootloader: 47, baud: 115200, port: 8888, allowed_client: "192.168.0.180", fallback_client: "", fallback_after_s: 30 },
   remote: { relays: false, link_timeout_s: 0 },
   relays: Array.from({ length: 8 }, (_, i) => ({ enabled: i < 2, name: ["siren", "lights"][i] ?? `relay${i + 1}`, label: ["Siren", "Hall lights"][i] ?? "", pin: wired ? [38, 39, 40, 41, 42, 43, 44, 48][i] : [38, 39, 40, 41, 42, 11, 12, 13][i], active_low: i === 1 })),
@@ -86,7 +87,7 @@ const alarmMessage = () => {
     zones: enabledZones().map(z => ({ id: z.id, ...(z.name ? { name: z.name } : {}), kind: z.kind, state: zoneState(z), bypassed: false })), open_zones: openZonesFor(panelState.mode === "stay" ? "stay" : "away"),
     events: panelState.events.map(e => ({ ago_s: Math.round((Date.now() - e.at) / 1000), kind: e.kind, ...(e.zone ? { zone: e.zone } : {}) })) };
 };
-const zonesData = () => ({ alarm: alarmMessage(), catalog, zones: config.zones.map((z, i) => ({ zone: i + 1, enabled: z.enabled, id: z.id, name: z.name, kind: z.kind, state: z.enabled ? zoneState(z) : "normal", bypassed: false, has_reading: z.enabled, millivolts: z.enabled ? (panelState.open.has(z.id) ? 1800 : 800) : 0 })) });
+const zonesData = () => ({ alarm: alarmMessage(), catalog, zones: config.zones.map((z, i) => ({ zone: i + 1, enabled: z.enabled, id: z.id, name: z.name, kind: z.kind, state: z.enabled ? zoneState(z) : "normal", bypassed: false, has_reading: z.enabled && !z.zigbee, millivolts: z.enabled && !z.zigbee ? (panelState.open.has(z.id) ? 1800 : 800) : 0, zigbee: z.zigbee ?? "", battery_low: false })) });
 const io = () => {
   const tick = Math.floor((Date.now() - started) / 2000);
   const z = config.zigbee;
@@ -123,14 +124,23 @@ const problems = doc => {
   }
   if (doc.remote?.relays && !(doc.mqtt?.enabled ?? config.mqtt.enabled)) list.push({ path: "remote.relays", code: "needs_broker" });
   if (doc.remote && doc.remote.link_timeout_s !== 0 && doc.remote.link_timeout_s !== undefined && doc.remote.link_timeout_s < 10) list.push({ path: "remote.link_timeout_s", code: "range" });
-  const seen = new Set();
+  const seen = new Set(), zigbeeSeen = new Set();
   (doc.zones ?? []).forEach((z, i) => {
     if (!z.enabled) return;
     const base = `zones.${i}.`;
     if (!/^[a-z0-9][a-z0-9_-]{0,31}$/.test(z.id ?? "")) list.push({ path: base + "id", code: z.id ? "invalid" : "required" });
     else if (seen.has(z.id)) list.push({ path: base + "id", code: "conflict" }); else seen.add(z.id);
-    if (!(z.pin >= 1 && z.pin <= 10)) list.push({ path: base + "pin", code: z.pin < 0 ? "required" : "not_analog" });
+    if (z.zigbee) {
+      if (!/^[0-9a-fA-F]{16}$/.test(z.zigbee)) list.push({ path: base + "zigbee", code: "invalid" });
+      else if (zigbeeSeen.has(z.zigbee.toLowerCase())) list.push({ path: base + "zigbee", code: "conflict" }); else zigbeeSeen.add(z.zigbee.toLowerCase());
+      if (!((doc.zigbee_local ?? config.zigbee_local).after_s > 0)) list.push({ path: base + "zigbee", code: "needs_local" });
+    } else if (!(z.pin >= 1 && z.pin <= 10)) list.push({ path: base + "pin", code: z.pin < 0 ? "required" : "not_analog" });
   });
+  if (doc.zigbee_local) {
+    const after = doc.zigbee_local.after_s;
+    if (after !== undefined && after !== 0 && (after < 10 || !(doc.zigbee?.enabled ?? config.zigbee.enabled))) list.push({ path: "zigbee_local.after_s", code: (doc.zigbee?.enabled ?? config.zigbee.enabled) ? "range" : "needs_zigbee" });
+    (doc.zigbee_local.sirens ?? []).forEach((a, i) => { if (!/^[0-9a-fA-F]{16}$/.test(a)) list.push({ path: `zigbee_local.sirens.${i}`, code: "invalid" }); });
+  }
   if ((doc.zones ?? config.zones).some(z => z.enabled) && doc.panel && doc.panel.pin !== undefined && doc.panel.pin !== "" && !/^\d{4,12}$/.test(doc.panel.pin)) list.push({ path: "panel.pin", code: "invalid" });
   if (doc.server?.commands && !(doc.mqtt?.enabled ?? config.mqtt.enabled)) list.push({ path: "server.commands", code: "needs_broker" });
   return list;

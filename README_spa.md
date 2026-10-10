@@ -26,7 +26,7 @@
 
 ---
 
-**Comprobación de honestidad - qué funciona hoy:** **Madurez: scaffolding.** Lo que existe es el **núcleo de la alarma** (qué es una zona, cómo un bucle cableado leído por el ADC se convierte en un estado, las reglas de la central: armado, retardos, la alarma, la sirena, el PIN con bloqueo) y el **firmware del nodo** construido sobre él (ajustes, panel web, mensajes con el servidor, puente de la radio Zigbee y relés), que compila para las dos placas; el núcleo, los ajustes, los mensajes y el panel en un navegador real contra un nodo simulado están probados en un ordenador con 492.368 comprobaciones. **Nada ha corrido en una placa ni en una instalación real, no se ha cableado ninguna zona ni conectado ninguna sirena, la pila Zigbee que la central necesita para tomar la radio al servidor no está escrita, y esto no es una central de alarma certificada.**
+**Comprobación de honestidad - qué funciona hoy:** **Madurez: scaffolding.** Lo que existe es el **núcleo de la alarma** (qué es una zona, cómo un bucle cableado leído por el ADC se convierte en un estado, las reglas de la central: armado, retardos, la alarma, la sirena, el PIN con bloqueo) y el **firmware del nodo** construido sobre él (ajustes, panel web, mensajes con el servidor, puente de la radio Zigbee y relés), que compila para las dos placas; el núcleo, los ajustes, los mensajes y el panel en un navegador real contra un nodo simulado están probados en un ordenador con 492.368 comprobaciones. **Nada ha corrido en una placa ni en una instalación real, no se ha cableado ninguna zona ni conectado ninguna sirena, la conversación Zigbee del propio nodo con un coordinador (tomar la radio al servidor) está escrita y probada contra un coordinador simulado, pero nunca con un coordinador ni con sensores reales, y esto no es una central de alarma certificada.**
 
 ---
 
@@ -38,7 +38,7 @@
 * **El PIN:** armar no lo pide, desarmar y silenciar sí; los PIN erróneos se cuentan y, tras unos pocos, se rechaza todo durante un tiempo, incluso el PIN correcto.
 * **El plan:** una pasarela en la placa del nodo eléctrico (radio Zigbee, zonas cableadas, relé de sirena) que trabaja con ARMOR-SERVER y **sigue vigilando cuando el servidor falta**: una central toma la radio al servidor por el puente Zigbee de ARMOR-ELECTRICAL. Véanse [el diseño](docs/DESIGN.md) y [el relevo](docs/FAILOVER.md).
 * **El nodo:** firmware para el ESP32-S3 (Ethernet PoE o Wi-Fi) con hasta ocho zonas cableadas, la sirena en un relé, el panel web de todos los nodos en siete idiomas, la radio Zigbee prestada a Zigbee2MQTT y los mensajes `armor/alarm/<nodo>/state|command|result`; el servidor solo puede armar y desarmar si tres interruptores independientes lo permiten. Véanse [el firmware](docs/NODE_FIRMWARE.md), [los mensajes](docs/ALARM_MESSAGES.md) y [el hardware](docs/HARDWARE.md).
-* **Todavía no:** la pila Zigbee que la central necesita para tomar la radio al servidor, el hardware y cualquier prueba en una instalación real.
+* **Tomar la radio:** cuando Zigbee2MQTT del servidor lleva un tiempo ausente, el nodo levanta el coordinador por sí mismo (ZNP), lee los sensores de las zonas que nombran uno (IAS Zone) y manda a sirenas Zigbee (IAS WD), y lo suelta en cuanto vuelve el cliente. **Todavía no:** un coordinador o sensor reales, el hardware y cualquier prueba en una instalación real.
 
 ## 📂 Estructura del repositorio
 
@@ -47,7 +47,7 @@ ARMOR-ALARM/
 ├── core/    alarm_zone, alarm_panel (the rules), alarm_config, alarm_message, alarm_runner (the node), plus the settings every node shares
 ├── main/    the ESP-IDF firmware: alarm_manager, the web server, the Zigbee bridge, the relays
 ├── panel/   the web panel (seven languages)
-├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract)
+├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract), test_zigbee (ZNP, IAS Zone and WD, the node's own conversation with a coordinator)
 ├── tools/   the stand-in node and the browser test of the panel
 ├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING
 └── images/  brand assets
