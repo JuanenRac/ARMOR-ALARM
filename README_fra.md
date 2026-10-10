@@ -14,19 +14,19 @@
   <a href="README_jpn.md">🇯🇵 日本語</a>
 </p>
 
-### Nœud et centrale d'alarme : les zones, l'armement, les temporisations, la sirène et le code PIN de l'alarme de la maison, sous forme de règles testées sur un ordinateur (pas encore de firmware ; rien n'a tourné sur une carte)
+### Nœud et centrale d'alarme : les zones, l'armement, les temporisations, la sirène et le code PIN de l'alarme de la maison, avec le firmware du nœud et les règles testées sur un ordinateur (rien n'a tourné sur une carte)
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL 3.0">
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
-  <img src="https://img.shields.io/badge/Checks-492%2C806-2ea44f.svg" alt="Checks">
+  <img src="https://img.shields.io/badge/Checks-492%2C368-2ea44f.svg" alt="Checks">
   <img src="https://img.shields.io/badge/Maturity-scaffolding-ff9800.svg" alt="Maturity">
 </p>
 
 ---
 
-**Vérification d'honnêteté - ce qui fonctionne aujourd'hui :** **Maturité : scaffolding.** Ce qui existe est le **cœur de l'alarme**, indépendant de tout matériel : ce qu'est une zone, comment une boucle câblée lue par le CAN devient un état, et les règles de la centrale (armement, temporisations de sortie et d'entrée, l'alarme, la sirène, le PIN avec verrouillage), testées sur un ordinateur par 492 806 contrôles. **Il n'y a pas encore de firmware, rien n'a tourné sur une carte ni sur une installation réelle, et ce n'est pas une centrale d'alarme certifiée.**
+**Vérification d'honnêteté - ce qui fonctionne aujourd'hui :** **Maturité : scaffolding.** Ce qui existe est le **cœur de l'alarme** (ce qu'est une zone, comment une boucle câblée lue par le CAN devient un état, les règles de la centrale : armement, temporisations, l'alarme, la sirène, le PIN avec verrouillage) et le **firmware du nœud** construit dessus (réglages, panneau web, messages avec le serveur, pont de la radio Zigbee et relais), qui se compile pour les deux cartes ; le cœur, les réglages, les messages et le panneau dans un vrai navigateur face à un nœud simulé sont testés sur un ordinateur par 492 368 contrôles. **Rien n'a tourné sur une carte ni sur une installation réelle, aucune zone n'a été câblée ni aucune sirène branchée, la pile Zigbee dont la centrale a besoin pour reprendre la radio au serveur n'est pas écrite, et ce n'est pas une centrale d'alarme certifiée.**
 
 ---
 
@@ -37,22 +37,26 @@
 * **La centrale :** armement *absent* et *présent*, une temporisation de sortie qui ne traite pas comme un intrus celui qui part, une temporisation d'entrée, une alarme qui **reste verrouillée** jusqu'à un désarmement correct, une sirène qui s'arrête seule au bout d'un moment, l'inhibition des zones ouvertes si on force (jamais un détecteur de fumée qui sonne) et un journal des cent derniers événements.
 * **Le PIN :** l'armement n'en demande pas, le désarmement et l'arrêt de l'alarme si ; les PIN faux sont comptés et, après quelques-uns, tout est refusé un moment, même le bon PIN.
 * **Le plan :** une passerelle sur la carte du nœud électrique (radio Zigbee, zones câblées, relais de sirène) qui travaille avec ARMOR-SERVER et **continue de surveiller quand le serveur est absent** : une centrale reprend la radio au serveur par le pont Zigbee d'ARMOR-ELECTRICAL. Voir [la conception](docs/DESIGN.md) et [la reprise](docs/FAILOVER.md).
-* **Pas encore :** le firmware, la pile Zigbee dont la centrale a besoin pour reprendre la radio, les messages avec le serveur, le matériel et tout essai sur une installation réelle.
+* **Le nœud :** firmware pour l'ESP32-S3 (Ethernet PoE ou Wi-Fi) avec jusqu'à huit zones câblées, la sirène sur un relais, le panneau web de tous les nœuds en sept langues, la radio Zigbee prêtée à Zigbee2MQTT et les messages `armor/alarm/<nœud>/state|command|result` ; le serveur ne peut armer et désarmer que si trois interrupteurs indépendants l'autorisent. Voir [le firmware](docs/NODE_FIRMWARE.md), [les messages](docs/ALARM_MESSAGES.md) et [le matériel](docs/HARDWARE.md).
+* **Pas encore :** la pile Zigbee dont la centrale a besoin pour reprendre la radio au serveur, le matériel et tout essai sur une installation réelle.
 
 ## 📂 Structure du dépôt
 
 ```text
 ARMOR-ALARM/
-├── core/    alarm_zone (what a zone is, the wired loop and its end-of-line resistor, the debouncer), alarm_panel (arming, delays, alarm, siren, PIN)
-├── tests/   test_alarm (scripted scenarios and a long random run of the rules that must always hold)
-├── docs/    DESIGN, FAILOVER, SAFETY
+├── core/    alarm_zone, alarm_panel (the rules), alarm_config, alarm_message, alarm_runner (the node), plus the settings every node shares
+├── main/    the ESP-IDF firmware: alarm_manager, the web server, the Zigbee bridge, the relays
+├── panel/   the web panel (seven languages)
+├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract)
+├── tools/   the stand-in node and the browser test of the panel
+├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING
 └── images/  brand assets
 ```
 
 ## 🛠️ Environnement de développement
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,806 checks: the zones, the loop, the debouncer and the panel's rules
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,368 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Voir [la conception](docs/DESIGN.md), [comment la centrale prend le relais du serveur](docs/FAILOVER.md) et les [notes de sécurité](docs/SAFETY.md).
@@ -66,6 +70,7 @@ Voir [la conception](docs/DESIGN.md), [comment la centrale prend le relais du se
 * **[ARMOR-SOLAR](https://github.com/JuanenRac/ARMOR-SOLAR)** - Protocoles des onduleurs et batteries solaires et messages d'un nœud passerelle
 * **[ARMOR-ELECTRICAL](https://github.com/JuanenRac/ARMOR-ELECTRICAL)** - Nœud électrique : compteurs, le message des mesures du réseau et les règles de commutation
 * **ARMOR-ALARM** (ce dépôt) - Nœud et centrale d'alarme : zones, armement, temporisations, sirène et PIN, avec ou sans le serveur
+* **[ARMOR-ALARM](https://github.com/JuanenRac/ARMOR-ALARM)** - Nœud et centrale d'alarme : zones, armement, temporisations, sirène et PIN, avec ou sans le serveur
 * **[ARMOR-HMI](https://github.com/JuanenRac/ARMOR-HMI)** - Panneau tactile : l'état du système sur un écran mural, armer et acquitter, et la maison de l'assistant vocal
 * **[ARMOR-NETWORK](https://github.com/JuanenRac/ARMOR-NETWORK)** - Le réseau local : ses appareils, internet et ce qui change
 * **[ARMOR-SERVER](https://github.com/JuanenRac/ARMOR-SERVER)** - Coordinateur central : télémétrie, alarmes, appareils, relevés solaires et caméras

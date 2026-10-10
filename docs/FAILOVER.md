@@ -27,7 +27,7 @@ Without the server the panel needs to know which sensor is which zone, the delay
 
 ## How the panel and the nodes talk without the server
 
-If the server also hosts the broker, the broker is away too. The proposal is a direct, authenticated HTTP API between the panel and each node: the wired zones go up to the panel, the siren and relay commands go down to the node. This needs the remote control of the electrical node's relays, which does not exist yet.
+If the server also hosts the broker, the broker is away too. The proposal is a direct, authenticated HTTP API between the panel and each node: the wired zones go up to the panel, the siren and relay commands go down to the node. The relays' side of this exists: the base board's relays can be moved remotely (off by default, three independent switches) and fall back to open when the link is lost. The HTTP API itself, and the panel, are not written.
 
 ## Power
 

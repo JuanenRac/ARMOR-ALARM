@@ -14,19 +14,19 @@
   <a href="README_jpn.md">🇯🇵 日本語</a>
 </p>
 
-### Alarm node and panel: the zones, the arming, the delays, the siren and the PIN of the house's alarm, as rules that are tested on a computer (no firmware yet; nothing has run on a board)
+### Alarm node and panel: the zones, the arming, the delays, the siren and the PIN of the house's alarm, with the firmware of the node and the rules tested on a computer (nothing has run on a board)
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL 3.0">
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
-  <img src="https://img.shields.io/badge/Checks-492%2C806-2ea44f.svg" alt="Checks">
+  <img src="https://img.shields.io/badge/Checks-492%2C368-2ea44f.svg" alt="Checks">
   <img src="https://img.shields.io/badge/Maturity-scaffolding-ff9800.svg" alt="Maturity">
 </p>
 
 ---
 
-**Honesty check - what runs today:** **Maturity: scaffolding.** What exists is the **core of the alarm**, apart from any hardware: what a zone is, how a wired loop read by the ADC becomes a state, and the panel's rules (arming, exit and entry delays, the alarm, the siren, the PIN with lockout), tested on a computer with 492,806 checks. **There is no firmware yet, nothing has run on a board or on a real installation, and this is not a certified alarm system.**
+**Honesty check - what runs today:** **Maturity: scaffolding.** What exists is the **core of the alarm** (what a zone is, how a wired loop read by the ADC becomes a state, the panel's rules: arming, delays, the alarm, the siren, the PIN with lockout) and the **firmware of the node** built on it (settings, web panel, messages with the server, the Zigbee radio's bridge and relays), which builds for both boards; the core, the settings, the messages and the panel in a real browser against a stand-in node are tested on a computer with 492,368 checks. **Nothing has run on a board or on a real installation, no zone has been wired and no siren connected, the Zigbee stack the panel needs to take the radio over from the server is not written, and this is not a certified alarm system.**
 
 ---
 
@@ -37,22 +37,26 @@
 * **The panel:** *away* and *stay* arming, an exit delay that does not treat the person leaving as an intruder, an entry delay, an alarm that **latches** until a correct disarm, a siren that stops by itself after a time, bypass of open zones when forced (never a sounding smoke detector), and a log of the last hundred events.
 * **The PIN:** arming needs none, disarming and silencing do; wrong PINs are counted and, after a few, everything is refused for a while, even the right PIN.
 * **The plan:** a gateway on the electrical node's board (a Zigbee radio, wired zones, a siren relay) that works with ARMOR-SERVER and **keeps guarding when the server is away**: a panel takes the radio over from the server through the Zigbee bridge of ARMOR-ELECTRICAL. See [the design](docs/DESIGN.md) and [the failover](docs/FAILOVER.md).
-* **Not yet:** the firmware, the Zigbee stack the panel needs to take the radio over, the messages with the server, the hardware and any test on a real installation.
+* **The node:** firmware for the ESP32-S3 (PoE Ethernet or Wi-Fi) with up to eight wired zones, the siren on a relay, the web panel of every node in seven languages, the Zigbee radio lent to Zigbee2MQTT, and the messages `armor/alarm/<node>/state|command|result`; the server may arm and disarm only when three independent switches allow it. See [the firmware](docs/NODE_FIRMWARE.md), [the messages](docs/ALARM_MESSAGES.md) and [the hardware](docs/HARDWARE.md).
+* **Not yet:** the Zigbee stack the panel needs to take the radio over from the server, the hardware and any test on a real installation.
 
 ## 📂 Repository Structure
 
 ```text
 ARMOR-ALARM/
-├── core/    alarm_zone (what a zone is, the wired loop and its end-of-line resistor, the debouncer), alarm_panel (arming, delays, alarm, siren, PIN)
-├── tests/   test_alarm (scripted scenarios and a long random run of the rules that must always hold)
-├── docs/    DESIGN, FAILOVER, SAFETY
+├── core/    alarm_zone, alarm_panel (the rules), alarm_config, alarm_message, alarm_runner (the node), plus the settings every node shares
+├── main/    the ESP-IDF firmware: alarm_manager, the web server, the Zigbee bridge, the relays
+├── panel/   the web panel (seven languages)
+├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract)
+├── tools/   the stand-in node and the browser test of the panel
+├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING
 └── images/  brand assets
 ```
 
 ## 🛠️ Development Environment
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,806 checks: the zones, the loop, the debouncer and the panel's rules
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,368 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 See the [design](docs/DESIGN.md), [how the panel takes over from the server](docs/FAILOVER.md) and the [safety notes](docs/SAFETY.md).
@@ -66,6 +70,7 @@ See the [design](docs/DESIGN.md), [how the panel takes over from the server](doc
 * **[ARMOR-SOLAR](https://github.com/JuanenRac/ARMOR-SOLAR)** - Solar inverter and battery protocols and the messages of a gateway node
 * **[ARMOR-ELECTRICAL](https://github.com/JuanenRac/ARMOR-ELECTRICAL)** - Electrical node: meters, the message of the network's readings and the rules for switching
 * **ARMOR-ALARM** (this repository) - Alarm node and panel: zones, arming, delays, siren and PIN, with the server or without it
+* **[ARMOR-ALARM](https://github.com/JuanenRac/ARMOR-ALARM)** - Alarm node and panel: zones, arming, delays, siren and PIN, with the server or without it
 * **[ARMOR-HMI](https://github.com/JuanenRac/ARMOR-HMI)** - Touch panel: the state of the system on a wall screen, arming and acknowledging, and the home of the voice assistant
 * **[ARMOR-NETWORK](https://github.com/JuanenRac/ARMOR-NETWORK)** - The local network: its devices, the internet and what changes
 * **[ARMOR-SERVER](https://github.com/JuanenRac/ARMOR-SERVER)** - Central coordinator: telemetry, alarms, devices, solar readings and cameras

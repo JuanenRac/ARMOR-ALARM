@@ -14,19 +14,19 @@
   <a href="README_jpn.md">🇯🇵 日本語</a>
 </p>
 
-### 报警节点与报警主机：住宅报警的防区、布防、延时、警笛和 PIN，以可在电脑上测试的规则实现（尚无固件；没有在电路板上运行过）
+### 报警节点与报警主机：住宅报警的防区、布防、延时、警笛和 PIN，含节点固件和在电脑上测试过的规则（没有在电路板上运行过）
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL 3.0">
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
-  <img src="https://img.shields.io/badge/Checks-492%2C806-2ea44f.svg" alt="Checks">
+  <img src="https://img.shields.io/badge/Checks-492%2C368-2ea44f.svg" alt="Checks">
   <img src="https://img.shields.io/badge/Maturity-scaffolding-ff9800.svg" alt="Maturity">
 </p>
 
 ---
 
-**诚实性检查 - 今天真正能运行的部分：** **成熟度：scaffolding。** 目前存在的是**报警核心**，与任何硬件无关：什么是防区、ADC 读取的有线回路如何变成状态，以及主机的规则（布防、离开和进入延时、报警、警笛、带锁定的 PIN），已在电脑上通过 492,806 项检查。**目前还没有固件，没有在电路板或真实设施上运行过，这也不是经过认证的报警系统。**
+**诚实性检查 - 今天真正能运行的部分：** **成熟度：scaffolding。** 目前存在的是**报警核心**（什么是防区、ADC 读取的有线回路如何变成状态、主机的规则：布防、延时、报警、警笛、带锁定的 PIN）以及建立在其上的**节点固件**（设置、网页面板、与服务器的消息、Zigbee 无线电桥接和继电器），可为两种电路板编译；核心、设置、消息以及在真实浏览器中对着模拟节点运行的面板，已在电脑上通过 492,368 项检查。**没有在电路板或真实设施上运行过，没有接过任何防区线路或警笛，主机从服务器接管无线电所需的 Zigbee 协议栈尚未编写，这也不是经过认证的报警系统。**
 
 ---
 
@@ -37,22 +37,26 @@
 * **主机：** *离家*和*在家*两种布防，不把离开的人当作入侵者的退出延时，进入延时，需要正确撤防才会解除的**锁定报警**，一段时间后自动停止的警笛，强制布防时旁路已打开的防区（响着的烟雾探测器永远不会被旁路），以及最近一百条事件的日志。
 * **PIN：** 布防不需要，撤防和消音需要；输错的 PIN 会被计数，几次之后一段时间内一切都会被拒绝，连正确的 PIN 也不例外。
 * **计划：** 在电气节点电路板上的网关（Zigbee 无线电、有线防区、警笛继电器），与 ARMOR-SERVER 配合，并在**服务器离线时继续守护**：主机通过 ARMOR-ELECTRICAL 的 Zigbee 桥接从服务器手中接管无线电。参见[设计](docs/DESIGN.md)和[接管](docs/FAILOVER.md)。
-* **尚未完成：** 固件、主机接管无线电所需的 Zigbee 协议栈、与服务器的消息、硬件，以及在真实设施上的任何测试。
+* **节点：** ESP32-S3 固件（PoE 以太网或 Wi-Fi），最多八个有线防区，警笛接在继电器上，所有节点通用的七种语言网页面板，借给 Zigbee2MQTT 的 Zigbee 无线电，以及消息 `armor/alarm/<节点>/state|command|result`；只有三个相互独立的开关都允许时，服务器才能布防和撤防。参见[固件](docs/NODE_FIRMWARE.md)、[消息](docs/ALARM_MESSAGES.md)和[硬件](docs/HARDWARE.md)。
+* **尚未完成：** 主机从服务器接管无线电所需的 Zigbee 协议栈、硬件，以及在真实设施上的任何测试。
 
 ## 📂 仓库结构
 
 ```text
 ARMOR-ALARM/
-├── core/    alarm_zone (what a zone is, the wired loop and its end-of-line resistor, the debouncer), alarm_panel (arming, delays, alarm, siren, PIN)
-├── tests/   test_alarm (scripted scenarios and a long random run of the rules that must always hold)
-├── docs/    DESIGN, FAILOVER, SAFETY
+├── core/    alarm_zone, alarm_panel (the rules), alarm_config, alarm_message, alarm_runner (the node), plus the settings every node shares
+├── main/    the ESP-IDF firmware: alarm_manager, the web server, the Zigbee bridge, the relays
+├── panel/   the web panel (seven languages)
+├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract)
+├── tools/   the stand-in node and the browser test of the panel
+├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING
 └── images/  brand assets
 ```
 
 ## 🛠️ 开发环境
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,806 checks: the zones, the loop, the debouncer and the panel's rules
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,368 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 参见[设计](docs/DESIGN.md)、[主机如何接替服务器](docs/FAILOVER.md)和[安全说明](docs/SAFETY.md)。
@@ -66,6 +70,7 @@ cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir bui
 * **[ARMOR-SOLAR](https://github.com/JuanenRac/ARMOR-SOLAR)** - 太阳能逆变器与电池的协议，以及网关节点的消息
 * **[ARMOR-ELECTRICAL](https://github.com/JuanenRac/ARMOR-ELECTRICAL)** - 电气节点：电表、电网读数消息和开关规则
 * **ARMOR-ALARM** (本仓库) - 报警节点与报警主机：防区、布防、延时、警笛和 PIN，有无服务器均可
+* **[ARMOR-ALARM](https://github.com/JuanenRac/ARMOR-ALARM)** - 报警节点与报警主机：防区、布防、延时、警笛和 PIN，有无服务器均可
 * **[ARMOR-HMI](https://github.com/JuanenRac/ARMOR-HMI)** - 触摸面板：墙面屏幕上的系统状态、布防与确认，以及语音助手的所在
 * **[ARMOR-NETWORK](https://github.com/JuanenRac/ARMOR-NETWORK)** - 本地网络：其设备、互联网以及变化
 * **[ARMOR-SERVER](https://github.com/JuanenRac/ARMOR-SERVER)** - 中央协调器：遥测、报警、设备、太阳能读数和摄像头

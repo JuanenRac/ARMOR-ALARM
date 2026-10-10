@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.1.0] - The firmware of the alarm node
+
+- **The node firmware** (ESP32-S3, ESP-IDF 5.5; `s3-eth` for the Waveshare ESP32-S3-ETH on PoE and `s3-wifi` for an ESP32-S3-WROOM-1): up to eight wired zones read on ADC1 pins, the panel of 0.0.1 running on them, the siren on a relay of the base board, and a task that publishes the state and listens for commands. A zone whose pin cannot be read says nothing at all, so a fault of the node is never taken for a tamper.
+- **The settings** (`core/alarm_config.hpp`) on top of what every node shares (`core/node_settings.hpp`) and the base board's radio and relays (`core/io_config.hpp`): zones, the loop's limits, delays, siren, PIN (stored, never shown) and the server's switch. Settings are checked before they are saved and a repeated zone identifier or a PIN that is not four to twelve digits is refused.
+- **The messages** `armor/alarm/<node>/state|command|result` (`core/alarm_message.hpp`, [docs/ALARM_MESSAGES.md](docs/ALARM_MESSAGES.md); the schemas and the conformance vectors are in ARMOR-COMMON): the state carries the phase, the mode, the siren, the zones, the open zones and the last ten events; a command is read strictly and gets no answer when it is anything but exactly the contract. The server may arm and disarm only when the node's setting, the broker's access list and the server's own switch all allow it, and a disarm from the server carries no PIN.
+- **The web panel** in seven languages: the alarm (arm, disarm with the PIN, the zones, the events), the zones and the loop's limits, the delays and PIN, the Zigbee radio, the relays and siren, and the pages every node has (network, Wi-Fi, broker, users, update over the air with rollback and from GitHub, log, HTTPS, Bluetooth set-up).
+- **The base board:** the Zigbee radio bridge, the relay outputs (they start open) and the update from GitHub come from ARMOR-COMMON's firmware base, the same files as the electrical node. Arming is never refused because of a lockout; only disarming is.
+- **Tests:** 492,368 checks in all on a computer (the rules, the settings, the messages, the runner and the update from GitHub), and the panel in a real browser against a stand-in node (25 checks on each board). The firmware builds for both boards. The messages the serialiser prints (10 states, 6 commands, 6 results) are checked against ARMOR-COMMON's published contract (`tests/emit_samples.cpp`, `tests/check_samples.py`).
+- **Documents:** the firmware, the messages, the hardware proposal (an end-of-line loop and the siren), the base board, the Zigbee radio and the Bluetooth set-up; the design, the failover and the safety notes now describe the firmware.
+- **Not done:** nothing has run on a board or on a real installation, no zone has been wired and no siren connected; the Zigbee stack the panel needs to take the radio over from the server is not written. This is not a certified alarm system.
+
 ## [0.0.1] - The core of the alarm: zones, the loop and the panel's rules
 
 - **Zones** (`core/alarm_zone.hpp`): four kinds - instant, entry, interior and always - and three states (normal, triggered, tamper). A zone may be a wired loop or a Zigbee sensor.

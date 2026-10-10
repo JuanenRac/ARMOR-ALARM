@@ -4,7 +4,7 @@
 // The panel is a state machine fed with the state of each zone and with the requests of whoever is at the keypad (or of the server):
 //   disarmed -> arm(away | stay) -> exit delay -> armed -> (a zone) -> alarm            ...or armed -> (an entry zone) -> entry delay -> alarm if nobody disarms in time
 // Rules worth knowing:
-//   - Arming needs no PIN (anyone may leave); DISARMING does, and so does silencing an alarm. Wrong PINs are counted: after `lockout_after` of them in a row everything is refused for
+//   - Arming needs no PIN (anyone may leave); DISARMING does, and so does silencing an alarm. Wrong PINs are counted: after `lockout_after` of them in a row disarming is refused for
 //     `lockout_s` seconds, even the right PIN.
 //   - Arming is refused while a zone that matters in that mode is open or tampered with, unless `force` is given: the open zones are then left out until the system is disarmed (an
 //     always-zone, smoke or panic, that is sounding can never be left out).
@@ -89,7 +89,6 @@ class Panel {
 
   Refusal arm(Mode mode, bool force, std::uint64_t now_ms) {
     if (mode == Mode::kDisarmed) return Refusal::kNotArmed;
-    if (locked_out(now_ms)) return Refusal::kLockedOut;
     if (phase_ != Phase::kDisarmed) return Refusal::kNotDisarmed;
     const std::vector<std::string> open = open_zones(mode);
     if (!open.empty() && !force) return Refusal::kZonesOpen;
@@ -113,6 +112,19 @@ class Panel {
       if (++wrong_pins_ >= timing_.lockout_after) { locked_until_ms_ = now_ms + static_cast<std::uint64_t>(timing_.lockout_s) * 1000ULL; wrong_pins_ = 0; note(now_ms, EventKind::kLockedOut, ""); }
       return Refusal::kBadPin;
     }
+    wrong_pins_ = 0;
+    if (phase_ == Phase::kDisarmed) return Refusal::kNone;
+    phase_ = Phase::kDisarmed;
+    mode_ = Mode::kDisarmed;
+    siren_on_ = false;
+    for (Slot& s : slots_) s.bypassed = false;
+    note(now_ms, EventKind::kDisarmed, "");
+    return Refusal::kNone;
+  }
+
+  // Ends the armed state or an alarm on the SERVER's say-so (a command that came over the broker, which the node accepted only because both its own setting and the broker's access list allow
+  // it): no PIN, and not held back by a lockout. A panel that is already disarmed stays so.
+  Refusal disarm_authorized(std::uint64_t now_ms) {
     wrong_pins_ = 0;
     if (phase_ == Phase::kDisarmed) return Refusal::kNone;
     phase_ = Phase::kDisarmed;

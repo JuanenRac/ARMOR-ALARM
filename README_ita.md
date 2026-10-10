@@ -14,19 +14,19 @@
   <a href="README_jpn.md">🇯🇵 日本語</a>
 </p>
 
-### Nodo e centrale d'allarme: le zone, l'inserimento, i ritardi, la sirena e il PIN dell'allarme di casa, come regole provate su un computer (ancora senza firmware; nulla ha girato su una scheda)
+### Nodo e centrale d'allarme: le zone, l'inserimento, i ritardi, la sirena e il PIN dell'allarme di casa, con il firmware del nodo e le regole provate su un computer (nulla ha girato su una scheda)
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL 3.0">
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
-  <img src="https://img.shields.io/badge/Checks-492%2C806-2ea44f.svg" alt="Checks">
+  <img src="https://img.shields.io/badge/Checks-492%2C368-2ea44f.svg" alt="Checks">
   <img src="https://img.shields.io/badge/Maturity-scaffolding-ff9800.svg" alt="Maturity">
 </p>
 
 ---
 
-**Controllo di onestà - cosa funziona oggi:** **Maturità: scaffolding.** Esiste il **nucleo dell'allarme**, indipendente da qualsiasi hardware: cos'è una zona, come un anello cablato letto dall'ADC diventa uno stato e le regole della centrale (inserimento, ritardi di uscita e di ingresso, l'allarme, la sirena, il PIN con blocco), provate su un computer con 492.806 controlli. **Non c'è ancora firmware, nulla ha girato su una scheda né su un impianto reale, e non è una centrale d'allarme certificata.**
+**Controllo di onestà - cosa funziona oggi:** **Maturità: scaffolding.** Esistono il **nucleo dell'allarme** (cos'è una zona, come un anello cablato letto dall'ADC diventa uno stato, le regole della centrale: inserimento, ritardi, l'allarme, la sirena, il PIN con blocco) e il **firmware del nodo** costruito su di esso (impostazioni, pannello web, messaggi con il server, ponte della radio Zigbee e relè), che compila per entrambe le schede; il nucleo, le impostazioni, i messaggi e il pannello in un vero browser contro un nodo simulato sono provati su un computer con 492.368 controlli. **Nulla ha girato su una scheda né su un impianto reale, nessuna zona è stata cablata né alcuna sirena collegata, lo stack Zigbee di cui la centrale ha bisogno per prendere la radio al server non è scritto, e non è una centrale d'allarme certificata.**
 
 ---
 
@@ -37,22 +37,26 @@
 * **La centrale:** inserimento *fuori casa* e *in casa*, un ritardo di uscita che non tratta da intruso chi esce, un ritardo d'ingresso, un allarme che **resta memorizzato** fino a un disinserimento corretto, una sirena che si ferma da sola dopo un po', l'esclusione delle zone aperte se si forza (mai un rilevatore di fumo che suona) e un registro degli ultimi cento eventi.
 * **Il PIN:** l'inserimento non lo chiede, il disinserimento e il silenziamento sì; i PIN errati vengono contati e, dopo alcuni, tutto viene rifiutato per un po', anche il PIN giusto.
 * **Il piano:** un gateway sulla scheda del nodo elettrico (radio Zigbee, zone cablate, relè della sirena) che lavora con ARMOR-SERVER e **continua a sorvegliare quando il server manca**: una centrale prende la radio al server tramite il ponte Zigbee di ARMOR-ELECTRICAL. Vedi [il progetto](docs/DESIGN.md) e [il passaggio di consegne](docs/FAILOVER.md).
-* **Non ancora:** il firmware, lo stack Zigbee di cui la centrale ha bisogno per prendere la radio, i messaggi con il server, l'hardware e qualsiasi prova su un impianto reale.
+* **Il nodo:** firmware per l'ESP32-S3 (Ethernet PoE o Wi-Fi) con fino a otto zone cablate, la sirena su un relè, il pannello web di tutti i nodi in sette lingue, la radio Zigbee prestata a Zigbee2MQTT e i messaggi `armor/alarm/<nodo>/state|command|result`; il server può inserire e disinserire solo se tre interruttori indipendenti lo permettono. Vedi [il firmware](docs/NODE_FIRMWARE.md), [i messaggi](docs/ALARM_MESSAGES.md) e [l'hardware](docs/HARDWARE.md).
+* **Non ancora:** lo stack Zigbee di cui la centrale ha bisogno per prendere la radio al server, l'hardware e qualsiasi prova su un impianto reale.
 
 ## 📂 Struttura del repository
 
 ```text
 ARMOR-ALARM/
-├── core/    alarm_zone (what a zone is, the wired loop and its end-of-line resistor, the debouncer), alarm_panel (arming, delays, alarm, siren, PIN)
-├── tests/   test_alarm (scripted scenarios and a long random run of the rules that must always hold)
-├── docs/    DESIGN, FAILOVER, SAFETY
+├── core/    alarm_zone, alarm_panel (the rules), alarm_config, alarm_message, alarm_runner (the node), plus the settings every node shares
+├── main/    the ESP-IDF firmware: alarm_manager, the web server, the Zigbee bridge, the relays
+├── panel/   the web panel (seven languages)
+├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract)
+├── tools/   the stand-in node and the browser test of the panel
+├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING
 └── images/  brand assets
 ```
 
 ## 🛠️ Ambiente di sviluppo
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,806 checks: the zones, the loop, the debouncer and the panel's rules
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,368 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Vedi [il progetto](docs/DESIGN.md), [come la centrale subentra al server](docs/FAILOVER.md) e le [note di sicurezza](docs/SAFETY.md).
@@ -66,6 +70,7 @@ Vedi [il progetto](docs/DESIGN.md), [come la centrale subentra al server](docs/F
 * **[ARMOR-SOLAR](https://github.com/JuanenRac/ARMOR-SOLAR)** - Protocolli di inverter e batterie solari e messaggi di un nodo gateway
 * **[ARMOR-ELECTRICAL](https://github.com/JuanenRac/ARMOR-ELECTRICAL)** - Nodo elettrico: contatori, il messaggio delle letture della rete e le regole di manovra
 * **ARMOR-ALARM** (questo repository) - Nodo e centrale d'allarme: zone, inserimento, ritardi, sirena e PIN, con il server o senza
+* **[ARMOR-ALARM](https://github.com/JuanenRac/ARMOR-ALARM)** - Nodo e centrale d'allarme: zone, inserimento, ritardi, sirena e PIN, con il server o senza
 * **[ARMOR-HMI](https://github.com/JuanenRac/ARMOR-HMI)** - Pannello touch: lo stato del sistema su uno schermo a parete, attivare e riconoscere gli allarmi, e la casa dell'assistente vocale
 * **[ARMOR-NETWORK](https://github.com/JuanenRac/ARMOR-NETWORK)** - La rete locale: i suoi dispositivi, internet e ciò che cambia
 * **[ARMOR-SERVER](https://github.com/JuanenRac/ARMOR-SERVER)** - Coordinatore centrale: telemetria, allarmi, dispositivi, letture solari e telecamere

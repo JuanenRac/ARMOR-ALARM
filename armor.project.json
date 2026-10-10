@@ -2,20 +2,20 @@
   "schema_version": "1.0",
   "ecosystem": "A.R.M.O.R.",
   "name": "ARMOR-ALARM",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "role": "Alarm node and panel: the zones, the arming, the delays, the siren and the PIN of the house's alarm, with the server or without it",
-  "stack": "C++17 (host-tested core); the ESP32-S3 firmware is not written yet",
+  "stack": "C++17 host-tested core; ESP-IDF 5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards)",
   "technologies": [
     "C++17",
     "Zigbee (IAS Zone / IAS WD)",
     "end-of-line loops",
     "MQTT"
   ],
-  "deployment_target": "ESP32-S3 nodes (PoE Ethernet) and a Wi-Fi panel; nothing has been built for a board yet",
+  "deployment_target": "ESP32-S3 nodes (Waveshare ESP32-S3-ETH on PoE, or an ESP32-S3-WROOM-1 on Wi-Fi) on the electrical node's base board; nothing has run on a board yet",
   "maturity": "scaffolding",
   "family": "Field Nodes",
   "parent": "ARMOR-COMMON",
   "build": "cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host",
-  "notes": "Only the core exists: what a zone is, how a wired loop with an end-of-line resistor read by the ADC becomes a state (with a debouncer), and the panel's rules - away and stay arming, exit and entry delays, an alarm that latches until a correct disarm, a siren that times out, bypass of open zones when forced, a PIN with lockout and a log of the last hundred events. 492,806 checks on a computer (scripted scenarios and a long random run of the rules that must always hold), and a broken PIN check or siren timeout is caught. There is no firmware, no Zigbee stack, no message with the server and no hardware: nothing has run on a board or on a real installation, and this is not a certified alarm system.",
-  "native_version": "0.0.1"
+  "notes": "The core (zones, the end-of-line loop with a debouncer, the panel: away and stay arming, exit and entry delays, a latching alarm, a siren that times out, forced bypass, PIN with lockout, a log of events) and, on it, the node firmware: the settings, eight wired zones, the siren on a relay, the web panel in seven languages, the update from GitHub, the Zigbee radio bridge and relays of the base board, and the messages armor/alarm/<node>/state|command|result (the server may arm and disarm only through three independent switches). 492,368 checks on a computer plus the panel in a real browser against a stand-in node; the firmware builds for both boards. Nothing has run on a board or on a real installation, no zone or siren has been wired, the Zigbee stack the panel needs to take the radio over from the server is not written, and this is not a certified alarm system.",
+  "native_version": "0.1.0"
 }

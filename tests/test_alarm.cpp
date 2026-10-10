@@ -207,7 +207,7 @@ static void test_pin_and_lockout() {
   CHECK(p.disarm("1111", 12000) == Refusal::kBadPin && p.disarm("2222", 12100) == Refusal::kBadPin && !p.locked_out(12200));
   CHECK(p.disarm("3333", 12200) == Refusal::kBadPin && p.locked_out(12300) && has_event(p, EventKind::kLockedOut));
   CHECK(p.disarm("1234", 13000) == Refusal::kLockedOut && p.phase() == Phase::kArmed);   // even the right PIN, while locked out
-  CHECK(p.arm(Mode::kAway, false, 13500) == Refusal::kLockedOut);
+  CHECK(p.arm(Mode::kAway, false, 13500) == Refusal::kNotDisarmed);   // arming is never held back by the lockout (it needs no PIN): here it is refused only because the panel is armed
   p.tick(43000); CHECK(!p.locked_out(43000));                                              // 30 s later
   CHECK(p.disarm("1234", 43500) == Refusal::kNone && p.phase() == Phase::kDisarmed);
   // a right PIN clears the count

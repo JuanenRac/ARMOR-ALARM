@@ -6,8 +6,9 @@ ARMOR-ALARM is the part of A.R.M.O.R. that guards the house: the **zones** (door
 
 - **`core/alarm_zone.hpp`:** what a zone is (four kinds, three states), how a wired loop with an end-of-line resistor becomes a state, and the debouncer.
 - **`core/alarm_panel.hpp`:** the panel's rules, with no hardware and no network.
+- **The node firmware** on top of them: the settings, the messages, the runner, the web panel and the Zigbee radio bridge and relays of the base board ([NODE_FIRMWARE.md](NODE_FIRMWARE.md), [ALARM_MESSAGES.md](ALARM_MESSAGES.md), [HARDWARE.md](HARDWARE.md)).
 
-Both are tested on a computer (`tests/test_alarm.cpp`).
+The rules are tested on a computer (`tests/test_alarm.cpp`) and so are the settings, the messages and the runner (`tests/test_node.cpp`).
 
 ## The zones
 
@@ -32,8 +33,8 @@ A wired loop gives four states on one pin: below `short_below` the loop is short
 - The alarm latches until a correct disarm; the siren stops by itself after a time.
 - A zone alarms when it **changes** to triggered, not while it stays so.
 
-## The plan (not built yet)
+## What is still to do
 
-- **Hardware:** the electrical node's base board, populated for alarm: the Zigbee radio, the wired zones on the analog pins, a siren relay and a way to arm and disarm on the spot. See [FAILOVER.md](FAILOVER.md) for the topology.
-- **Firmware** for the ESP32-S3 with the settings, the web panel and the messages the other nodes have, and the Zigbee pieces the panel needs (below).
-- **Messages with ARMOR-SERVER** (zones, state, commands), to be added to the shared contract in ARMOR-COMMON.
+- **The Zigbee stack** the panel needs to take the radio over while the server is away (below and in [FAILOVER.md](FAILOVER.md)): the bridge only hands the line over today.
+- **The server, Studio and the Android client** reading the messages (they are in ARMOR-COMMON's contract, version 0).
+- **Hardware:** the base board populated for alarm, the wired zones on the analog pins, a siren relay and a way to arm and disarm on the spot ([HARDWARE.md](HARDWARE.md) is a proposal, untried).

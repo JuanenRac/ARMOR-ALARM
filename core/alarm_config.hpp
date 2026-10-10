@@ -1,0 +1,200 @@
+// ARMOR-ALARM - the settings of an alarm node: what the panel's web page edits, what is stored in flash and what the firmware obeys.
+// Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
+//
+// What every node has (identity, the way in, the broker, the clock...) is core/node_settings.hpp's, and the base board's Zigbee radio, relays and whether the broker may move them are
+// core/io_config.hpp's: the same files the electrical node uses. This file adds what makes it an ALARM: up to eight wired zones (a loop with an end-of-line resistor on an analog pin), the
+// limits that tell the states of a loop apart, the panel's delays and its PIN, which relay is the siren, and whether the server may arm and disarm it. Pure: no hardware, all tested on a computer.
+// The PIN is a secret like a password: a document sent without one keeps the stored one, and "pin_set" tells the panel that there is one.
+#pragma once
+#include <algorithm>
+#include <array>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "alarm_panel.hpp"
+#include "alarm_zone.hpp"
+#include "base_board.hpp"
+#include "board_s3.hpp"
+#include "config_common.hpp"
+#include "io_config.hpp"
+#include "node_settings.hpp"
+
+namespace armor::config {
+
+constexpr std::size_t kZoneCount = board::kAnalogCount;   // a wired zone is read by an analog pin, so there are as many as the board has
+
+// One wired zone: a loop on an analog pin. `kind` says when it matters (alarm::ZoneKind); the reading must hold `hold_ms` to count (the debouncer).
+struct ZoneSetting {
+  bool enabled = false;
+  std::string id;           // lowercase letters, digits, - and _ : what the zone is called in the messages
+  std::string name;         // what a person calls it ("Front door")
+  int pin = -1;
+  alarm::ZoneKind kind = alarm::ZoneKind::kInstant;
+  int hold_ms = 200;
+};
+
+// The panel: its delays, the PIN and which relay is the siren (a relay of the base board, by its name; empty: no siren).
+struct PanelSetting {
+  alarm::Timing timing;
+  std::string pin;
+  std::string siren_relay;
+};
+
+// Whether the server may arm and disarm the panel by a command (armor/alarm/<node>/command). OFF by default: the panel then answers only to its own page. On, the broker's access list must
+// allow it too (ARMOR-DEVOPS, mqtt_identity.sh alarm-commands <node> on): both are needed, and the server has its own switch.
+struct ServerLink {
+  bool commands = false;
+};
+
+struct Settings : NodeSettings, IoSettings {
+  std::array<ZoneSetting, kZoneCount> zones;
+  alarm::LoopLimits loop;
+  PanelSetting panel;
+  ServerLink server;
+};
+
+// ---- the defaults of a node that has never been configured ---------------------------------------------------------------------
+
+// `mac_tail` is the last three bytes of the node's MAC as six lowercase hexadecimal digits: it makes the first identity unique.
+inline Settings default_settings(std::string_view mac_tail) {
+  Settings s;
+  node_defaults(s, mac_tail);
+  io_defaults(s);
+  for (std::size_t i = 0; i < kZoneCount; ++i) { s.zones[i].id = "zone" + std::to_string(i + 1); s.zones[i].pin = board::kAnalogPins[i]; }
+  return s;
+}
+
+inline bool pin_is_valid(std::string_view pin) {
+  if (pin.size() < 4 || pin.size() > 12) return false;
+  for (const char c : pin) if (c < '0' || c > '9') return false;
+  return true;
+}
+
+// ---- reading -------------------------------------------------------------------------------------------------------------------
+
+// Applies the members present in `document` on top of `s`; whatever the document omits stays as it was. The result is checked with validate(): read_settings() only reports a member of the
+// wrong type or size.
+inline void read_settings(const json::Value& document, Settings& s, Problems& problems) {
+  using namespace detail;
+  if (!document.is_object()) { bad(problems, "", "invalid"); return; }
+  node_read(document, s, problems);
+  io_read(document, s, problems);
+  if (const json::Value* zones = document.get("zones"); zones != nullptr) {
+    if (!zones->is_array() || zones->items.size() > kZoneCount) bad(problems, "zones", "invalid");
+    else for (std::size_t i = 0; i < zones->items.size(); ++i) {
+      const json::Value& item = zones->items[i];
+      const std::string base = "zones." + std::to_string(i) + ".";
+      if (!item.is_object()) { bad(problems, base + "enabled", "invalid"); continue; }
+      ZoneSetting& zone = s.zones[i];
+      read_bool(item, "enabled", zone.enabled, base + "enabled", problems);
+      read_text(item, "id", zone.id, 32, base + "id", problems);
+      read_text(item, "name", zone.name, 40, base + "name", problems);
+      read_int(item, "pin", zone.pin, -1, board::kLastGpio, base + "pin", problems);
+      read_int(item, "hold_ms", zone.hold_ms, 20, 5000, base + "hold_ms", problems);
+      if (const json::Value* kind = item.get("kind"); kind != nullptr) {
+        if (!kind->is_string() || !alarm::parse_kind(kind->text, zone.kind)) bad(problems, base + "kind", "invalid");
+      }
+    }
+  }
+  if (const json::Value* loop = document.get("loop"); loop != nullptr && loop->is_object()) {
+    read_double(*loop, "short_below_mv", s.loop.short_below_mv, 0.0, 3300.0, "loop.short_below_mv", problems);
+    read_double(*loop, "normal_below_mv", s.loop.normal_below_mv, 0.0, 3300.0, "loop.normal_below_mv", problems);
+    read_double(*loop, "triggered_below_mv", s.loop.triggered_below_mv, 0.0, 3300.0, "loop.triggered_below_mv", problems);
+  }
+  if (const json::Value* panel = document.get("panel"); panel != nullptr && panel->is_object()) {
+    alarm::Timing& t = s.panel.timing;
+    int value = 0;
+    value = static_cast<int>(t.exit_delay_s); read_int(*panel, "exit_delay_s", value, 0, 600, "panel.exit_delay_s", problems); t.exit_delay_s = static_cast<std::uint32_t>(value);
+    value = static_cast<int>(t.entry_delay_s); read_int(*panel, "entry_delay_s", value, 0, 600, "panel.entry_delay_s", problems); t.entry_delay_s = static_cast<std::uint32_t>(value);
+    value = static_cast<int>(t.siren_max_s); read_int(*panel, "siren_max_s", value, 1, 3600, "panel.siren_max_s", problems); t.siren_max_s = static_cast<std::uint32_t>(value);
+    value = static_cast<int>(t.lockout_after); read_int(*panel, "lockout_after", value, 1, 20, "panel.lockout_after", problems); t.lockout_after = static_cast<std::uint32_t>(value);
+    value = static_cast<int>(t.lockout_s); read_int(*panel, "lockout_s", value, 1, 3600, "panel.lockout_s", problems); t.lockout_s = static_cast<std::uint32_t>(value);
+    read_secret(*panel, "pin", s.panel.pin, "panel.pin", problems);
+    read_text(*panel, "siren_relay", s.panel.siren_relay, 32, "panel.siren_relay", problems);
+  }
+  if (const json::Value* server = document.get("server"); server != nullptr && server->is_object()) read_bool(*server, "commands", s.server.commands, "server.commands", problems);
+}
+
+// ---- checking ------------------------------------------------------------------------------------------------------------------
+
+inline Problems validate(const Settings& s) {
+  using detail::bad;
+  Problems problems;
+  node_validate(s, problems);
+
+  // the pins: the wired zones' and the base board's may not be reserved nor shared
+  detail::PinClaims claims;
+  const auto claim = [&](int gpio, const std::string& who, const std::string& path) {
+    if (!board::assignable(gpio)) { bad(problems, path, "reserved"); return; }
+    if (!claims.claim(gpio, who)) bad(problems, path, "conflict");
+  };
+  io_validate(s, s.mqtt.enabled, claim, problems);
+
+  // the zones: each has its own name and its own analog pin
+  std::vector<std::string> ids;
+  std::size_t enabled = 0;
+  for (std::size_t i = 0; i < kZoneCount; ++i) {
+    const ZoneSetting& zone = s.zones[i];
+    if (!zone.enabled) continue;
+    ++enabled;
+    const std::string base = "zones." + std::to_string(i) + ".";
+    if (!alarm::valid_zone_id(zone.id)) bad(problems, base + "id", zone.id.empty() ? "required" : "invalid");
+    else if (std::find(ids.begin(), ids.end(), zone.id) != ids.end()) bad(problems, base + "id", "conflict");
+    else ids.push_back(zone.id);
+    std::size_t characters = 0;
+    if (!zone.name.empty() && (!net::valid_utf8(zone.name, &characters) || characters > 40)) bad(problems, base + "name", "invalid");
+    if (zone.pin < 0) bad(problems, base + "pin", "required");
+    else if (!board::analog_capable(zone.pin)) bad(problems, base + "pin", board::assignable(zone.pin) ? "not_analog" : "reserved");
+    else if (!claims.claim(zone.pin, "zone" + std::to_string(i + 1))) bad(problems, base + "pin", "conflict");
+  }
+  if (enabled > 0 && !alarm::limits_are_valid(s.loop)) bad(problems, "loop.short_below_mv", "range");
+
+  // the panel: a PIN of four to twelve digits as soon as there is anything to guard, and a siren that is one of the relays
+  if (!s.panel.pin.empty() && !pin_is_valid(s.panel.pin)) bad(problems, "panel.pin", "invalid");
+  if (enabled > 0 && s.panel.pin.empty()) bad(problems, "panel.pin", "required");
+  if (!s.panel.siren_relay.empty()) {
+    bool found = false;
+    for (const RelaySetting& relay : s.relays) if (relay.enabled && relay.name == s.panel.siren_relay) found = true;
+    if (!found) bad(problems, "panel.siren_relay", "unknown_relay");
+  }
+  if (s.server.commands && !s.mqtt.enabled) bad(problems, "server.commands", "needs_broker");
+  return problems;
+}
+
+// ---- writing -------------------------------------------------------------------------------------------------------------------
+
+// `secrets`: true writes the passwords and the PIN (for flash storage); false replaces them with "password_set" and "pin_set" flags (for the panel).
+inline std::string to_json(const Settings& s, bool secrets) {
+  json::Writer w;
+  w.begin_object();
+  node_write_head(w, s, secrets);
+  w.key("zones").begin_array();
+  for (const ZoneSetting& zone : s.zones) {
+    w.begin_object().field("enabled", zone.enabled).field("id", zone.id).field("name", zone.name).field("pin", zone.pin).field("kind", alarm::kind_text(zone.kind)).field("hold_ms", zone.hold_ms).end_object();
+  }
+  w.end_array();
+  w.key("loop").begin_object().key("short_below_mv").number(s.loop.short_below_mv).key("normal_below_mv").number(s.loop.normal_below_mv).key("triggered_below_mv").number(s.loop.triggered_below_mv).end_object();
+  w.key("panel").begin_object().field("exit_delay_s", static_cast<long long>(s.panel.timing.exit_delay_s)).field("entry_delay_s", static_cast<long long>(s.panel.timing.entry_delay_s))
+      .field("siren_max_s", static_cast<long long>(s.panel.timing.siren_max_s)).field("lockout_after", static_cast<long long>(s.panel.timing.lockout_after))
+      .field("lockout_s", static_cast<long long>(s.panel.timing.lockout_s)).field("siren_relay", s.panel.siren_relay);
+  if (secrets) w.field("pin", s.panel.pin); else w.field("pin_set", !s.panel.pin.empty());
+  w.end_object();
+  w.key("server").begin_object().field("commands", s.server.commands).end_object();
+  io_write(w, s);
+  node_write_tail(w, s);
+  w.end_object();
+  return w.str();
+}
+
+// Reads a stored or received document on top of `base` and checks the result. Nothing is applied unless `problems` stays empty.
+inline bool load(std::string_view text, const Settings& base, Settings& out, Problems& problems) {
+  json::Value document;
+  if (!json::parse(text, document)) { problems.push_back({"", "not_json"}); return false; }
+  out = base;
+  read_settings(document, out, problems);
+  if (problems.empty()) problems = validate(out);
+  return problems.empty();
+}
+
+}  // namespace armor::config
