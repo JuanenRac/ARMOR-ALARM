@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## [0.2.5] - Copy-log icon and copy of a firmware slot to the other
+
+- **Copy one firmware slot to the other:** next to the switch between ota_0 and ota_1, the Firmware card of the panel has a button that copies the firmware that runs over the other slot (task of its own, with a percentage, the image checked at the end, no restart, no change of the boot slot); `POST /api/v1/ota/copy` starts it and `GET /api/v1/ota/copy` tells how far it is. The slot sizes shown by the status are measured again after a copy or an update.
+- **Node panel:** the log of the panel has a small copy icon (two sheets) that puts the whole log on the clipboard and says "Copied" for a moment; the same panel code is shared by all the nodes.
+
 ## [0.2.4] - Lockout that grows and a first reading that holds
 
 - Wrong PINs lock the panel for longer each time: the base time, then five times and then fifteen times as long, until a right PIN is entered.
