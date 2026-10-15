@@ -2,7 +2,13 @@
 
 All notable changes to this project are documented here.
 
-## [0.2.3] - Audit round two: hardening of the web server, the broker link and the sessions
+## [0.2.4] - Lockout that grows and a first reading that holds
+
+- Wrong PINs lock the panel for longer each time: the base time, then five times and then fifteen times as long, until a right PIN is entered.
+- The first reading of a zone after a start has to hold like any other, so a converter still settling at power-up can no longer raise a false tamper; tests for both.
+- Looking for a new version on GitHub no longer fails with connect_failed when the node was short of internal memory (a browser on the HTTPS panel at the same moment): the TLS buffers now live in the external memory, and the search and the download try three times.
+
+## [0.2.3] - Hardening of the web server, the broker link and the sessions
 
 - The web server gives up a request that announces a body and sends nothing (or an upload that stalls) after fifteen seconds, instead of keeping its only thread for ever.
 - The restart after an installation from GitHub no longer depends on a browser asking how far it is: a timer of the node watches the installation and restarts it when it is done.

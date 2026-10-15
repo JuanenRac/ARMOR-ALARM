@@ -110,10 +110,19 @@ class Panel {
     if (locked_out(now_ms)) return Refusal::kLockedOut;
     if (!pin_matches(pin)) {
       note(now_ms, EventKind::kBadPin, "");
-      if (++wrong_pins_ >= timing_.lockout_after) { locked_until_ms_ = now_ms + static_cast<std::uint64_t>(timing_.lockout_s) * 1000ULL; wrong_pins_ = 0; note(now_ms, EventKind::kLockedOut, ""); }
+      if (++wrong_pins_ >= timing_.lockout_after) {
+        // Each lockout without a right PIN in between lasts longer: once, five times and fifteen times `lockout_s` (a fixed minute let somebody try three PINs a minute for ever).
+        static constexpr std::uint32_t kGrowth[3] = {1, 5, 15};
+        const std::uint32_t factor = kGrowth[lockouts_ < 2 ? lockouts_ : 2];
+        if (lockouts_ < 2) ++lockouts_;
+        locked_until_ms_ = now_ms + static_cast<std::uint64_t>(timing_.lockout_s) * factor * 1000ULL;
+        wrong_pins_ = 0;
+        note(now_ms, EventKind::kLockedOut, "");
+      }
       return Refusal::kBadPin;
     }
     wrong_pins_ = 0;
+    lockouts_ = 0;
     if (phase_ == Phase::kDisarmed) return Refusal::kNone;
     phase_ = Phase::kDisarmed;
     mode_ = Mode::kDisarmed;
@@ -244,7 +253,7 @@ class Panel {
   Mode mode_ = Mode::kDisarmed;
   bool siren_on_ = false;
   std::uint64_t phase_since_ms_ = 0, alarm_since_ms_ = 0, locked_until_ms_ = 0;
-  std::uint32_t wrong_pins_ = 0;
+  std::uint32_t wrong_pins_ = 0, lockouts_ = 0;
   std::string entry_zone_;
 };
 

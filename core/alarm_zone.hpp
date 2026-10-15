@@ -86,13 +86,14 @@ class ButtonFilter {
   bool held_ = false, fired_ = false;
 };
 
-// A reading must hold for `hold_ms` before it counts, so that a contact that bounces, or a wire that a gust of wind shakes, does not raise the alarm. The first reading is taken
-// as it is: a node that has just started knows nothing better.
+// A reading must hold for `hold_ms` before it counts, so that a contact that bounces, or a wire that a gust of wind shakes, does not raise the alarm. The first one too, starting from "normal".
 class Debouncer {
  public:
   explicit Debouncer(std::uint64_t hold_ms = 200) : hold_ms_(hold_ms) {}
   ZoneState feed(ZoneState reading, std::uint64_t now_ms) {
-    if (!started_) { started_ = true; stable_ = reading; candidate_ = reading; since_ms_ = now_ms; return stable_; }
+    // The first reading has to hold like any other: a converter that is still settling at power-up gave a false tamper the moment the node restarted. The zone reads "normal" for those
+    // first 200 ms; a door that was really open is reported just after.
+    if (!started_) { started_ = true; stable_ = ZoneState::kNormal; candidate_ = reading; since_ms_ = now_ms; return stable_; }
     if (reading != candidate_) { candidate_ = reading; since_ms_ = now_ms; }
     if (candidate_ != stable_ && now_ms - since_ms_ >= hold_ms_) stable_ = candidate_;
     return stable_;

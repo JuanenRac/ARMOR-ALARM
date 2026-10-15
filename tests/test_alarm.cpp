@@ -70,7 +70,8 @@ static void test_debounce() {
   CHECK(d.feed(ZoneState::kNormal, 400) == ZoneState::kTriggered);        // and so does the way back
   CHECK(d.feed(ZoneState::kNormal, 600) == ZoneState::kNormal);
   Debouncer first(500);
-  CHECK(first.feed(ZoneState::kTriggered, 5) == ZoneState::kTriggered);   // the first reading is taken as it is
+  CHECK(first.feed(ZoneState::kTriggered, 5) == ZoneState::kNormal);      // the first reading holds like any other (a converter still settling at power-up gave a false tamper)
+  CHECK(first.feed(ZoneState::kTriggered, 300) == ZoneState::kNormal && first.feed(ZoneState::kTriggered, 505) == ZoneState::kTriggered);
 }
 
 // ---- arming and the delays ---------------------------------------------------------------------------------------------------------
@@ -199,6 +200,24 @@ static void test_open_zones_at_arming() {
   CHECK(q.arm(Mode::kAway, false, 100) == Refusal::kZonesOpen && q.arm(Mode::kStay, false, 200) == Refusal::kNone);
   // an unknown zone is ignored
   q.set_zone("nope", ZoneState::kTriggered, 300); CHECK(!q.bypassed("nope") && q.zone_state("nope") == ZoneState::kNormal);
+}
+
+static void test_lockout_grows_until_a_right_pin() {
+  Panel p(quick(), house(), "1234");
+  p.arm(Mode::kAway, false, 10000);
+  // quick(): three wrong PINs lock for 30 s; the second lockout lasts five times as long and the third fifteen times
+  for (int i = 0; i < 3; ++i) p.disarm("0000", 12000 + i);
+  CHECK(p.locked_out(12000 + 29000) && !p.locked_out(12002 + 30000));
+  for (int i = 0; i < 3; ++i) p.disarm("0000", 50000 + i);
+  CHECK(p.locked_out(50002 + 149000) && !p.locked_out(50002 + 150000));
+  for (int i = 0; i < 3; ++i) p.disarm("0000", 300000 + i);
+  CHECK(p.locked_out(300002 + 449000) && !p.locked_out(300002 + 450000));
+  for (int i = 0; i < 3; ++i) p.disarm("0000", 800000 + i);
+  CHECK(p.locked_out(800002 + 449000) && !p.locked_out(800002 + 450000));   // it stops growing at fifteen times
+  CHECK(p.disarm("1234", 800002 + 450000) == Refusal::kNone);              // the right PIN, and the next lockout is short again
+  p.arm(Mode::kAway, false, 1300000);
+  for (int i = 0; i < 3; ++i) p.disarm("0000", 1400000 + i);
+  CHECK(!p.locked_out(1400002 + 30000));
 }
 
 static void test_pin_and_lockout() {
@@ -372,6 +391,7 @@ int main() {
   test_always_zones_and_tamper();
   test_open_zones_at_arming();
   test_pin_and_lockout();
+  test_lockout_grows_until_a_right_pin();
   test_siren_times_out();
   test_zero_delays_and_log();
   test_restart_and_tamper();
