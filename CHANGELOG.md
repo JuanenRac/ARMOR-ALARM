@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## [0.2.3] - Audit round two: hardening of the web server, the broker link and the sessions
+
+- The web server gives up a request that announces a body and sends nothing (or an upload that stalls) after fifteen seconds, instead of keeping its only thread for ever.
+- The restart after an installation from GitHub no longer depends on a browser asking how far it is: a timer of the node watches the installation and restarts it when it is done.
+- A "remember me" session is no longer taken for free after thirty minutes when the table fills up, and a session token that starts again replaces the old one instead of living twice.
+- On a saved broker that is not the first one, the node tries the first one again every half hour instead of forgetting it until the next restart.
+
 ## [0.2.2] - A restart no longer disarms the house; no deadlock; sabotage cannot be left out
 
 - **The armed state is kept in flash** (mode, an alarm that was running, the zones left out) every time it changes and taken back at start: a power cut, a reset by the watchdog, an update or the automatic restart no longer leave the central disarmed. An exit delay that was running comes back armed; an entry delay that was running (nobody had disarmed) comes back as an alarm. A record that is not exactly a saved state arms nothing.
