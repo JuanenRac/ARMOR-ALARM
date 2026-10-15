@@ -284,6 +284,131 @@ static void test_state_follows_the_panel() {
   CHECK(state.get("zones")->items.size() == 4);
 }
 
+// ---- digital contacts and buttons ----------------------------------------------------------------------------------------------------
+
+static void test_digital_zones_and_buttons_settings() {
+  config::Settings s = house();
+  // a door contact (normally closed) on a relay pin that is not used as a relay, a box tamper switch and a panic button (normally open, always)
+  const int pins[] = {board::kRelayPins[5], board::kRelayPins[6], board::kRelayPins[7]};
+  for (int k = 0; k < 3; ++k) { config::ZoneSetting& z = s.zones[4 + k]; z.enabled = true; z.id = std::string("d") + char('1' + k); z.input = "digital"; z.pin = pins[k]; }
+  s.zones[5].role = "tamper";
+  s.zones[6].contact = "no"; s.zones[6].kind = alarm::ZoneKind::kAlways;
+  CHECK(config::validate(s).empty());
+  CHECK(s.zones[4].is_digital() && !s.zones[0].is_digital());
+  s.zones[4].pin = board::kRelayPins[0];   // the siren's relay
+  CHECK(has(config::validate(s), "zones.4.pin", "conflict"));
+  s.zones[4].pin = 33;
+  CHECK(has(config::validate(s), "zones.4.pin", "reserved"));
+  s.zones[4].pin = pins[0];
+  s.zones[4].contact = "xx"; s.zones[4].role = "boss";
+  CHECK(has(config::validate(s), "zones.4.contact", "invalid") && has(config::validate(s), "zones.4.role", "invalid"));
+  s.zones[4].contact = "nc"; s.zones[4].role = "contact";
+  s.zones[7].enabled = true; s.zones[7].id = "weird"; s.zones[7].input = "magic";
+  CHECK(has(config::validate(s), "zones.7.input", "invalid"));
+  s.zones[7].enabled = false;
+  // a digital zone needs no loop limits: a document without loops is valid whatever the limits say
+  config::Settings only = valid_settings();
+  only.zones[0].enabled = true; only.zones[0].id = "door"; only.zones[0].input = "digital"; only.zones[0].pin = board::kRelayPins[5]; only.panel.pin = "1234";
+  only.loop.short_below_mv = 5000;
+  CHECK(config::validate(only).empty());
+  // buttons: their pins are claimed like any other
+  s.buttons[0] = {true, "arm_away", pins[0]};
+  CHECK(has(config::validate(s), "buttons.0.pin", "conflict"));
+  s.buttons[0] = {true, "arm_away", 3};
+  s.buttons[1] = {true, "arm_stay", 45};
+  s.buttons[0].action = "open_the_door";
+  CHECK(has(config::validate(s), "buttons.0.action", "invalid"));
+  s.buttons[0].action = "arm_away";
+  CHECK(config::validate(s).empty());
+  // it survives the document
+  config::Settings back;
+  config::Problems problems;
+  CHECK(config::load(config::to_json(s, true), valid_settings(), back, problems));
+  CHECK(back.zones[5].input == "digital" && back.zones[5].role == "tamper" && back.zones[6].contact == "no" && back.buttons[1].action == "arm_stay" && back.buttons[1].pin == 45 && back.buttons[0].enabled);
+  CHECK(!config::load("{\"zones\":[{\"input\":\"magic\",\"enabled\":true,\"id\":\"x\",\"pin\":5}]}", valid_settings(), back, problems) && has(problems, "zones.0.input", "invalid"));
+}
+
+static void test_digital_contacts() {
+  using alarm::ZoneState;
+  using alarm::classify_contact;
+  // a contact to ground with the pin pulled up: closed = low
+  CHECK(classify_contact(false, true, false) == ZoneState::kNormal);      // normally closed, closed
+  CHECK(classify_contact(true, true, false) == ZoneState::kTriggered);    // normally closed, opened
+  CHECK(classify_contact(true, false, false) == ZoneState::kNormal);      // normally open, open
+  CHECK(classify_contact(false, false, false) == ZoneState::kTriggered);  // normally open, closed (a panic button)
+  CHECK(classify_contact(true, true, true) == ZoneState::kTamper);        // the switch of a box that opens
+  CHECK(classify_contact(false, true, true) == ZoneState::kNormal);
+}
+
+static void test_digital_zone_at_work() {
+  config::Settings s = house();
+  s.zones[3].enabled = false;   // no smoke loop in this house
+  s.zones[4].enabled = true; s.zones[4].id = "garage-door"; s.zones[4].input = "digital"; s.zones[4].pin = board::kRelayPins[5]; s.zones[4].kind = alarm::ZoneKind::kInstant;
+  s.zones[5].enabled = true; s.zones[5].id = "box"; s.zones[5].input = "digital"; s.zones[5].pin = board::kRelayPins[6]; s.zones[5].role = "tamper"; s.zones[5].kind = alarm::ZoneKind::kAlways;
+  alarm::Runner node(s);
+  std::uint64_t now = 0;
+  auto turn = [&](std::uint64_t ms, bool garage_high, bool box_high) {
+    const std::uint64_t until = now + ms;
+    while (now < until) {
+      node.feed(0, kClosed, now); node.feed(1, kClosed, now); node.feed(2, kClosed, now);
+      node.feed(4, 0, now);   // an analog reading for a digital zone is ignored
+      node.feed_digital(4, garage_high, now); node.feed_digital(5, box_high, now);
+      node.feed_digital(0, true, now);        // a digital level for a loop zone is ignored
+      node.tick(now);
+      now += 100;
+    }
+  };
+  turn(1000, false, false);
+  CHECK(node.zones()[4].digital && node.zones()[4].has_reading && !node.zones()[4].pin_high && node.zones()[4].state == alarm::ZoneState::kNormal && node.zones()[0].state == alarm::ZoneState::kNormal);
+  node.arm(alarm::Mode::kAway, false, now);
+  turn(11000, false, false);
+  CHECK(node.panel().phase() == alarm::Phase::kArmed);
+  turn(100, true, false); turn(1000, false, false);   // a bounce of the garage door contact (held 100 ms, the zone holds 200 ms): nothing
+  CHECK(node.panel().phase() == alarm::Phase::kArmed);
+  turn(400, true, false);                              // the garage door opens
+  CHECK(node.panel().phase() == alarm::Phase::kAlarm && node.zones()[4].state == alarm::ZoneState::kTriggered && node.siren());
+  node.disarm("1234", now);
+  turn(1000, false, false);
+  CHECK(node.panel().phase() == alarm::Phase::kDisarmed);
+  turn(400, false, true);                              // the box is opened, even disarmed: tamper
+  CHECK(node.panel().phase() == alarm::Phase::kAlarm && node.zones()[5].state == alarm::ZoneState::kTamper);
+}
+
+static void test_buttons_arm_the_panel() {
+  config::Settings s = house();
+  s.buttons[0] = {true, "arm_away", 3};
+  s.buttons[1] = {true, "arm_stay", 45};
+  alarm::Runner node(s);
+  std::uint64_t now = 0;
+  const std::vector<double> quiet{kClosed, kClosed, kClosed, kClosed};
+  run(node, now, 1000, quiet);
+  // not pressed, or a button that is not set up: nothing
+  CHECK(!node.feed_button(0, true, now).fired && !node.feed_button(2, false, now).fired && !node.feed_button(9, false, now).fired);
+  // pressed (low) but not for long enough: nothing; held: it fires once
+  CHECK(!node.feed_button(0, false, now).fired);
+  now += 40;
+  CHECK(!node.feed_button(0, false, now).fired);
+  now += 20;
+  const alarm::Runner::ButtonPress press = node.feed_button(0, false, now);
+  CHECK(press.fired && press.mode == alarm::Mode::kAway && press.refusal == alarm::Refusal::kNone && node.panel().phase() == alarm::Phase::kExitDelay);
+  now += 500;
+  CHECK(!node.feed_button(0, false, now).fired);          // still held: not again
+  node.feed_button(0, true, now);                          // let go
+  run(node, now, 11000, quiet);
+  CHECK(node.disarm("1234", now) == alarm::Refusal::kNone);
+  node.feed_button(1, false, now); now += 100;
+  const alarm::Runner::ButtonPress stay = node.feed_button(1, false, now);
+  CHECK(stay.fired && stay.mode == alarm::Mode::kStay && stay.refusal == alarm::Refusal::kNone);
+  node.feed_button(1, true, now); now += 10;
+  node.feed_button(1, false, now); now += 100;
+  const alarm::Runner::ButtonPress again = node.feed_button(1, false, now);
+  CHECK(again.fired && again.refusal == alarm::Refusal::kNotDisarmed);   // a press while armed is refused, not ignored
+  // a button arms and cannot disarm: there is no such action
+  config::Settings bad = s;
+  bad.buttons[2] = {true, "disarm", 4};
+  CHECK(has(config::validate(bad), "buttons.2.action", "invalid"));
+}
+
 int main() {
   test_defaults();
   test_zones();
@@ -295,5 +420,9 @@ int main() {
   test_server_commands();
   test_state_follows_the_panel();
   std::printf("%d checks, %d failures\n", checks, failures);
+  test_digital_zones_and_buttons_settings();
+  test_digital_contacts();
+  test_digital_zone_at_work();
+  test_buttons_arm_the_panel();
   return failures == 0 ? 0 : 1;
 }

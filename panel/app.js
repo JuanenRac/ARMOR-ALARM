@@ -419,6 +419,7 @@ function claimedGpios(exceptPath) {
   if (z && z.enabled) { add("zigbee.rx", z.rx); add("zigbee.tx", z.tx); add("zigbee.reset", z.reset); add("zigbee.bootloader", z.bootloader); }
   (S.cfg.relays || []).forEach((r, i) => { if (r.enabled) add("relays." + i + ".pin", r.pin); });
   (S.cfg.zones || []).forEach((z, i) => { if (z.enabled && !z.zigbee) add("zones." + i + ".pin", z.pin); });
+  (S.cfg.buttons || []).forEach((b, i) => { if (b.enabled) add("buttons." + i + ".pin", b.pin); });
   return used;
 }
 function pinOptions(selected, includeNone, exceptPath) {
@@ -511,9 +512,26 @@ function relayCard(index) {
 }
 
 
+// The token of the direct API: never shown once saved; "Generate" makes a random one (the browser's own generator) and shows it once, to be copied.
+let generatedToken = "";
+function tokenField() {
+  const generate = () => {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    generatedToken = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+    setValue("remote.token", generatedToken);
+    render();
+  };
+  return el("div", { class: "field" }, el("span", {}, t("remoteToken")),
+    generatedToken ? el("div", {}, el("code", { class: "mono", id: "remote-token-shown" }, generatedToken), el("p", { class: "hint" }, t("remoteTokenShown"))) : el("p", { class: "muted" }, S.cfg.remote.token_set ? t("remoteTokenSet") : ""),
+    isAdmin() ? el("button", { type: "button", id: "remote-token-generate", onclick: generate }, t("remoteTokenGenerate")) : null);
+}
+
 function remoteCard() {
   const node = S.session.node_id;
   return el("section", { class: "card" }, el("h2", {}, t("remoteTitle")), el("p", { class: "muted" }, t("remoteHelp")),
+    field("remoteHttp", "remote.http", { type: "checkbox", rerender: true }),
+    S.cfg.remote.http ? [el("p", { class: "hint" }, t("remoteHttpHint")), tokenField()] : null,
     field("remoteRelays", "remote.relays", { type: "checkbox", rerender: true }),
     S.cfg.remote.relays ? [field("remoteTimeout", "remote.link_timeout_s", { type: "number", min: 0, max: 86400, hint: t("remoteTimeoutHint") }), el("p", { class: "hint" }, t("remoteStudio", node))] : null);
 }
@@ -562,7 +580,7 @@ function alarmPage() {
 
 const zoneInfo = index => (S.zonesData && S.zonesData.zones && S.zonesData.zones[index]) || { enabled: false };
 const zonePinOptions = (selected, exceptPath) => pinOptions(selected, true, exceptPath).filter(([gpio]) => gpio === -1 || (gpio >= 1 && gpio <= 10));
-const zoneLiveText = z => (z.zigbee ? (z.has_reading ? t("zoneLiveZigbee", z.battery_low ? "⚠ " + t("zs_" + z.state) : t("zs_" + z.state)) : t("zoneZigbeeWaiting")) : (z.has_reading ? t("zoneLive", Math.round(z.millivolts)) : t("zoneNoReading")));
+const zoneLiveText = z => (z.digital ? (z.has_reading ? t(z.pin_high ? "zoneLivePinHigh" : "zoneLivePinLow") : t("zoneNoReading")) : z.zigbee ? (z.has_reading ? t("zoneLiveZigbee", z.battery_low ? "⚠ " + t("zs_" + z.state) : t("zs_" + z.state)) : t("zoneZigbeeWaiting")) : (z.has_reading ? t("zoneLive", Math.round(z.millivolts)) : t("zoneNoReading")));
 const ZONE_KINDS = ["instant", "entry", "interior", "always"];
 
 function zoneCard(index) {
@@ -572,17 +590,32 @@ function zoneCard(index) {
     cfg.enabled ? [
       el("div", { class: "row" }, field("zoneId", base + "id", { max: 32, hint: t("meterChannelHint") }), field("zoneName", base + "name", { max: 40 })),
       field("zoneZigbee", base + "zigbee", { max: 16, placeholder: "00158d0001a2b3c4", hint: t("zoneZigbeeHint") }),
-      el("div", { class: "row" }, cfg.zigbee ? null : field("zonePin", base + "pin", { type: "select", number: true, options: zonePinOptions(cfg.pin, base + "pin") }),
+      cfg.zigbee ? null : field("zoneInput", base + "input", { type: "select", rerender: true, options: [["loop", t("zoneInputLoop")], ["digital", t("zoneInputDigital")]], hint: t("zoneInputHint") }),
+      el("div", { class: "row" }, cfg.zigbee ? null : field("zonePin", base + "pin", { type: "select", number: true, options: cfg.input === "digital" ? pinOptions(cfg.pin, true, base + "pin") : zonePinOptions(cfg.pin, base + "pin") }),
         field("zoneKind", base + "kind", { type: "select", options: ZONE_KINDS.map(k => [k, t("zk_" + k)]) })),
+      !cfg.zigbee && cfg.input === "digital" ? el("div", { class: "row" }, field("zoneContact", base + "contact", { type: "select", options: [["nc", t("zoneContactNc")], ["no", t("zoneContactNo")]], hint: t("zoneContactHint") }),
+        field("zoneRole", base + "role", { type: "select", options: [["contact", t("zoneRoleContact")], ["tamper", t("zoneRoleTamper")]], hint: t("zoneRoleHint") })) : null,
       field("zoneHold", base + "hold_ms", { type: "number", min: 20, max: 5000, hint: t("zoneHoldHint") }),
       live.enabled ? el("div", { class: "actions" }, el("span", { id: "zone-pill-" + index }, zonePill(live.state, live.bypassed)), el("span", { class: "muted", id: "zone-live-" + index }, zoneLiveText(live))) : null] : null);
+}
+
+const BUTTON_ACTIONS = ["arm_away", "arm_stay"];
+
+// The push buttons that arm the panel (no PIN to arm; only the PIN disarms): a switch to ground on a pin, which the node pulls up.
+function buttonsCard() {
+  return el("section", { class: "card" }, el("h2", {}, t("buttonsTitle")), el("p", { class: "muted" }, t("buttonsHelp")),
+    (S.cfg.buttons || []).map((b, i) => {
+      const base = "buttons." + i + ".";
+      return el("div", { class: "row" }, field("buttonEnabled", base + "enabled", { type: "checkbox", rerender: true }),
+        b.enabled ? [field("buttonAction", base + "action", { type: "select", options: BUTTON_ACTIONS.map(a => [a, t("ba_" + a)]) }), field("buttonPin", base + "pin", { type: "select", number: true, options: pinOptions(b.pin, true, base + "pin") })] : null);
+    }));
 }
 
 function zonesPage() {
   return el("div", {}, note(t("alWarn")), el("p", { class: "muted" }, t("zonesIntro")), note(t("zonesRestart"), "info"),
     el("div", { class: "grid wide" }, [el("section", { class: "card" }, el("h2", {}, t("loopTitle")), el("p", { class: "muted" }, t("loopHelp")),
       field("loopShort", "loop.short_below_mv", { type: "number", min: 0, max: 3300, step: "any" }), field("loopNormal", "loop.normal_below_mv", { type: "number", min: 0, max: 3300, step: "any" }),
-      field("loopTriggered", "loop.triggered_below_mv", { type: "number", min: 0, max: 3300, step: "any" }))].concat(Array.from({ length: 8 }, (_, i) => zoneCard(i)))));
+      field("loopTriggered", "loop.triggered_below_mv", { type: "number", min: 0, max: 3300, step: "any" })), buttonsCard()].concat(Array.from({ length: 8 }, (_, i) => zoneCard(i)))));
 }
 
 // ---- the delays, the PIN, the siren and the server ------------------------------------------------------------------------------------

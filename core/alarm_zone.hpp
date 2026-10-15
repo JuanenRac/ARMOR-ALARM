@@ -62,6 +62,30 @@ inline ZoneState classify_loop(double millivolts, const LoopLimits& limits) {
   return ZoneState::kTamper;
 }
 
+// A plain contact on a digital pin (a switch to ground, the pin pulled up by the node or by the board): closed pulls the pin low, open lets it go high. A contact that is closed while
+// all is well (`normally_closed`: a door contact, a tamper switch) is triggered when it opens; one that is open while all is well (a panic button, the dry output of a sensor) is
+// triggered when it closes. A tamper switch (`tamper_role`) says tamper instead of triggered, which raises the alarm in every state of the system.
+inline ZoneState classify_contact(bool pin_high, bool normally_closed, bool tamper_role) {
+  const bool triggered = normally_closed ? pin_high : !pin_high;
+  return !triggered ? ZoneState::kNormal : tamper_role ? ZoneState::kTamper : ZoneState::kTriggered;
+}
+
+// A push button on a digital pin, pressed when the pin is low: it fires ONCE per press, after the level has held for `hold_ms` (a button that bounces fires once), and again only after
+// it has been let go.
+class ButtonFilter {
+ public:
+  explicit ButtonFilter(std::uint64_t hold_ms = 50) : hold_ms_(hold_ms) {}
+  bool feed(bool pressed, std::uint64_t now_ms) {
+    if (!pressed) { held_ = false; fired_ = false; return false; }
+    if (!held_) { held_ = true; since_ms_ = now_ms; }
+    if (!fired_ && now_ms - since_ms_ >= hold_ms_) { fired_ = true; return true; }
+    return false;
+  }
+ private:
+  std::uint64_t hold_ms_, since_ms_ = 0;
+  bool held_ = false, fired_ = false;
+};
+
 // A reading must hold for `hold_ms` before it counts, so that a contact that bounces, or a wire that a gust of wind shakes, does not raise the alarm. The first reading is taken
 // as it is: a node that has just started knows nothing better.
 class Debouncer {

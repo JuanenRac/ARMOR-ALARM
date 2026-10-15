@@ -28,6 +28,7 @@ extern "C" {
 }
 #include "core/auth.hpp"
 #include "core/board_s3.hpp"
+#include "core/central_link.hpp"
 #include "core/netplan.hpp"
 #include "core/json.hpp"
 #include "core/web_policy.hpp"
@@ -471,6 +472,62 @@ esp_err_t post_alarm_disarm(httpd_req_t* r) {
   return send_ok(r);
 }
 
+// ---- the direct API for a central (core/central_link.hpp) ---------------------------------------------------------------------------
+
+// True when the request carries the node's token and the interface is on; otherwise 401, and the node does not say which of the two it was.
+bool central_allowed(httpd_req_t* r) {
+  const config::Settings s = store::settings();
+  if (central::authorized(s.remote.http, s.remote.token, header(r, "Authorization"))) return true;
+  send_error(r, 401, "unauthorized");
+  return false;
+}
+
+esp_err_t get_remote_state(httpd_req_t* r) {
+  if (!central_allowed(r)) return ESP_OK;
+  return send_json(r, 200, api::remote_state_json());
+}
+
+esp_err_t post_remote_relay(httpd_req_t* r) {
+  if (!central_allowed(r)) return ESP_OK;
+  std::string body;
+  if (!read_body(r, body)) return send_error(r, 413, "too_large");
+  central::RelayRequest request;
+  switch (central::parse_relay_request(body, request)) {
+    case central::Parse::kNotJson: return send_error(r, 400, "not_json");
+    case central::Parse::kInvalid: return send_error(r, 422, "invalid");
+    case central::Parse::kOk: break;
+  }
+  bool now_on = false;
+  switch (relay_outputs::command_direct(request.relay, request.action, now_on)) {
+    case relay_outputs::Outcome::kOk: return send_json(r, 200, central::relay_answer(request.relay, now_on));
+    case relay_outputs::Outcome::kUnknownRelay: return send_error(r, 404, "unknown_relay");
+    default: return send_error(r, 422, "invalid");
+  }
+}
+
+// The central arms or disarms the panel through the node's own API: the same rules as the panel's page (arming needs no PIN, disarming does, and a few wrong PINs lock the panel).
+esp_err_t post_remote_alarm(httpd_req_t* r) {
+  if (!central_allowed(r)) return ESP_OK;
+  json::Value in;
+  if (!read_json(r, in)) return ESP_OK;
+  const std::string action = in.string_or("action", "");
+  if (action == "arm") {
+    const std::string mode = in.string_or("mode", "");
+    if (mode != "away" && mode != "stay") return send_error(r, 422, "invalid_mode");
+    const alarm::Refusal result = manager::arm(mode == "stay" ? alarm::Mode::kStay : alarm::Mode::kAway, in.bool_or("force", false));
+    if (result != alarm::Refusal::kNone) return refuse(r, result);
+    ESP_LOGW(kTag, "armed (%s) by the central", mode.c_str());
+    return send_ok(r);
+  }
+  if (action == "disarm") {
+    const alarm::Refusal result = manager::disarm(in.string_or("pin", ""));
+    if (result != alarm::Refusal::kNone) return refuse(r, result);
+    ESP_LOGW(kTag, "disarmed by the central");
+    return send_ok(r);
+  }
+  return send_error(r, 422, "invalid");
+}
+
 const char* result_code(auth::Result result) {
   switch (result) {
     case auth::Result::kOk: return "ok";
@@ -713,6 +770,7 @@ esp_err_t api_handler(httpd_req_t* r) {
   const int method = r->method;
   if (method == HTTP_GET) {
     if (route == "session") return get_session(r);
+    if (route == "remote/state") return get_remote_state(r);
     if (route == "status") return get_status(r);
     if (route == "wifi/scan") return get_wifi_scan(r);
     if (route == "config") return get_config(r);
@@ -734,6 +792,8 @@ esp_err_t api_handler(httpd_req_t* r) {
     if (route == "ota/switch") return post_ota_switch(r);
     if (route == "ota/install") return post_ota_install(r);
     if (route == "time") return post_time(r);
+    if (route == "remote/relay") return post_remote_relay(r);
+    if (route == "remote/alarm") return post_remote_alarm(r);
     if (route == "alarm/arm") return post_alarm_arm(r);
     if (route == "alarm/disarm") return post_alarm_disarm(r);
     if (route == "zigbee/radio") return post_zigbee_radio(r);

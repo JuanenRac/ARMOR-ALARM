@@ -1,7 +1,8 @@
 // ARMOR-ALARM - the alarm at work: the task that reads the wired zones and runs core/alarm_runner.hpp. Nothing here has run on a board.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
-// What the panel decides (the states of a loop, the delays, the PIN, the siren) is in core/ and is tested on a computer; this file only reads the ADC, gives the runner the clock, puts the
+// What the panel decides (the states of a loop, the delays, the PIN, the siren) is in core/ and is tested on a computer; this file only reads the ADC and the digital pins (the contacts and
+// the buttons: switches to ground, the pins pulled up), gives the runner the clock, puts the
 // siren's level on its relay and talks to the broker. Only ADC1 is used (the converter shared with the Wi-Fi radio is never touched), 0 to about 3.1 V at the pin: a zone's loop must never put
 // more than 3.3 V there. A pin that cannot be read says nothing - it is never taken for a tamper, because a fault of the node must not sound the siren.
 #include "alarm_manager.hpp"
@@ -9,6 +10,7 @@
 #include <memory>
 #include <mutex>
 extern "C" {
+#include "driver/gpio.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_adc/adc_oneshot.h"
@@ -133,7 +135,20 @@ void alarm_task(void*) {
   std::array<adc_cali_handle_t, config::kZoneCount> calibration{};
   std::array<bool, config::kZoneCount> ready{};
   bool any_zone = false;
-  for (const config::ZoneSetting& zone : g_settings.zones) any_zone = any_zone || (zone.enabled && !zone.is_zigbee());   // a Zigbee zone has no pin
+  for (const config::ZoneSetting& zone : g_settings.zones) any_zone = any_zone || (zone.enabled && !zone.is_zigbee() && !zone.is_digital());   // a Zigbee zone has no pin, a digital one is not read by the ADC
+  // the digital pins: inputs with the internal pull-up (a closed contact pulls the pin to ground)
+  const auto input_with_pullup = [](int pin, const char* what) {
+    gpio_config_t io{};
+    io.pin_bit_mask = 1ULL << pin;
+    io.mode = GPIO_MODE_INPUT;
+    io.pull_up_en = GPIO_PULLUP_ENABLE;
+    if (gpio_config(&io) != ESP_OK) { ESP_LOGE(kTag, "GPIO %d could not be set up as the input of %s", pin, what); return false; }
+    return true;
+  };
+  std::array<bool, config::kZoneCount> digital_ready{};
+  std::array<bool, config::kButtonCount> button_ready{};
+  for (std::size_t i = 0; i < config::kZoneCount; ++i) if (g_settings.zones[i].enabled && g_settings.zones[i].is_digital()) digital_ready[i] = input_with_pullup(g_settings.zones[i].pin, "a zone");
+  for (std::size_t i = 0; i < config::kButtonCount; ++i) if (g_settings.buttons[i].enabled) button_ready[i] = input_with_pullup(g_settings.buttons[i].pin, "a button");
   if (any_zone) {
     if (adc_oneshot_new_unit(&unit_config, &unit) != ESP_OK) {
       ESP_LOGE(kTag, "the converter could not be started: the zones are not read");
@@ -143,7 +158,7 @@ void alarm_task(void*) {
     } else {
       for (std::size_t i = 0; i < config::kZoneCount; ++i) {
         const config::ZoneSetting& zone = g_settings.zones[i];
-        if (!zone.enabled || zone.is_zigbee()) continue;
+        if (!zone.enabled || zone.is_zigbee() || zone.is_digital()) continue;
         const adc_channel_t channel = static_cast<adc_channel_t>(board::adc1_channel(zone.pin));
         adc_oneshot_chan_cfg_t channel_config{};
         channel_config.atten = ADC_ATTEN_DB_12;
@@ -162,7 +177,7 @@ void alarm_task(void*) {
     std::array<bool, config::kZoneCount> read{};
     if (unit != nullptr) {
       for (std::size_t i = 0; i < config::kZoneCount; ++i) {
-        if (!g_settings.zones[i].enabled || g_settings.zones[i].is_zigbee() || !ready[i]) continue;
+        if (!g_settings.zones[i].enabled || g_settings.zones[i].is_zigbee() || g_settings.zones[i].is_digital() || !ready[i]) continue;
         const adc_channel_t channel = static_cast<adc_channel_t>(board::adc1_channel(g_settings.zones[i].pin));
         long sum = 0;
         int taken = 0;
@@ -175,6 +190,16 @@ void alarm_task(void*) {
     }
     std::lock_guard<std::mutex> guard(g_lock);
     for (std::size_t i = 0; i < config::kZoneCount; ++i) if (read[i]) g_runner->feed(i, millivolts[i], now);
+    for (std::size_t i = 0; i < config::kZoneCount; ++i) if (digital_ready[i]) g_runner->feed_digital(i, gpio_get_level(static_cast<gpio_num_t>(g_settings.zones[i].pin)) != 0, now);
+    bool pressed = false;
+    for (std::size_t i = 0; i < config::kButtonCount; ++i) {
+      if (!button_ready[i]) continue;
+      const alarm::Runner::ButtonPress press = g_runner->feed_button(i, gpio_get_level(static_cast<gpio_num_t>(g_settings.buttons[i].pin)) != 0, now);
+      if (!press.fired) continue;
+      pressed = true;
+      ESP_LOGW(kTag, "button %u: armed %s: %s", static_cast<unsigned>(i + 1), alarm::mode_text(press.mode), alarm::refusal_text(press.refusal));
+    }
+    if (pressed) publish_state_locked(true);
     if (g_host) {
       for (const zigbee::ZoneUpdate& update : g_host->updates()) g_runner->feed_zigbee(update.zone_id, update.state, update.battery_low, now);
       if (!g_host->ready()) g_zigbee_siren_told = false;                    // a radio that is not ours cannot be told anything; it is told again when it is

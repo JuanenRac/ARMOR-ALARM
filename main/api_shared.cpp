@@ -22,6 +22,7 @@ extern "C" {
 #include "core/zigbee_bridge.hpp"
 #include "mqtt_link.hpp"
 #include "network.hpp"
+#include "task_health.hpp"
 #include "node_store.hpp"
 #include "relay_outputs.hpp"
 #include "web_server.hpp"
@@ -128,19 +129,34 @@ std::string status_json() {
       .field("dropped", static_cast<long long>(m.dropped)).end_object();
   const web::TlsStatus tls = web::tls_status();
   w.key("web").begin_object().field("mode", tls.mode).field("https", tls.running).field("cert_sha256", tls.fingerprint).end_object();
+  w.key("tasks").raw(taskhealth::json());
+  taskhealth::warn_if_low();
   w.key("alarm").raw(manager::state_json());
   w.end_object();
   return w.str();
 }
 
 // The alarm as it stands (what the node publishes), its zones with what each pin reads, and the pins the board offers.
+std::string remote_state_json() {
+  json::Writer w;
+  w.begin_object().field("node_id", store::settings().node_id).key("alarm").raw(manager::state_json());
+  w.key("zones").begin_array();
+  for (const alarm::ZoneView& zone : manager::zones()) {
+    if (!zone.enabled) continue;
+    w.begin_object().field("id", zone.id).field("name", zone.name).field("kind", alarm::kind_text(zone.kind)).field("state", alarm::state_text(zone.state)).field("bypassed", zone.bypassed)
+        .field("has_reading", zone.has_reading).field("battery_low", zone.battery_low).end_object();
+  }
+  w.end_array().key("relays").raw(relay_outputs::json()).end_object();
+  return w.str();
+}
+
 std::string zones_json() {
   json::Writer w;
   w.begin_object().key("alarm").raw(manager::state_json());
   w.key("zones").begin_array();
   for (const alarm::ZoneView& zone : manager::zones()) {
     w.begin_object().field("zone", static_cast<int>(zone.number)).field("enabled", zone.enabled).field("id", zone.id).field("name", zone.name).field("kind", alarm::kind_text(zone.kind))
-        .field("state", alarm::state_text(zone.state)).field("bypassed", zone.bypassed).field("has_reading", zone.has_reading).key("millivolts").number(zone.millivolts, 0).field("zigbee", zone.zigbee).field("battery_low", zone.battery_low).end_object();
+        .field("state", alarm::state_text(zone.state)).field("bypassed", zone.bypassed).field("has_reading", zone.has_reading).key("millivolts").number(zone.millivolts, 0).field("digital", zone.digital).field("pin_high", zone.pin_high).field("zigbee", zone.zigbee).field("battery_low", zone.battery_low).end_object();
   }
   w.end_array().key("catalog").begin_array();
   for (int gpio = board::kFirstGpio; gpio <= board::kLastGpio; ++gpio) {

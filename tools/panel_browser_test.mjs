@@ -104,8 +104,18 @@ try {
   body = await text();
   check("the zones page has the loop's limits and eight zones", body.includes("The loop's limits") && [1, 2, 8].every(n => body.includes(`Zone ${n}`)) && body.includes("Never put more than 3.3 V"), body.slice(0, 300));
   check("each live zone shows what its pin reads", /\d+ mV at the pin/.test(body), body.slice(0, 300));
-  const pinList = await ev(`(() => { const c = [...document.querySelectorAll('section.card')].find(x => x.querySelector('h2')?.textContent.startsWith('Zone 1')); const sel = [...c.querySelectorAll('select')][0]; return [...sel.options].map(o => o.value).filter(v => v !== '-1').map(Number); })()`);
+  const pinList = await ev(`(() => { const c = [...document.querySelectorAll('section.card')].find(x => x.querySelector('h2')?.textContent.startsWith('Zone 1')); const sel = [...c.querySelectorAll('select')][1]; return [...sel.options].map(o => o.value).filter(v => v !== '-1').map(Number); })()`);
   check("a zone is offered only ADC1 pins", pinList.length > 0 && pinList.every(g => g >= 1 && g <= 10), JSON.stringify(pinList));
+  check("the zones page offers plain contacts and the buttons that arm", body.includes("Kind of input") && body.includes("Buttons that arm") && body.includes("Loop with end-of-line resistor"), body.slice(0, 200));
+  // a zone turned into a plain contact asks for its contact and role, and may use any free pin
+  await ev(`(() => { const c = [...document.querySelectorAll('section.card')].find(x => x.querySelector('h2')?.textContent.startsWith('Zone 4')); const sel = [...c.querySelectorAll('select')][0]; sel.value = 'digital'; sel.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(300);
+  const digitalBody = await text();
+  check("a plain-contact zone asks whether the contact is closed or open while all is well, and what it reports", digitalBody.includes("The contact is") && digitalBody.includes("It reports") && digitalBody.includes("a tamper (the switch of a box"));
+  const digitalPins = await ev(`(() => { const c = [...document.querySelectorAll('section.card')].find(x => x.querySelector('h2')?.textContent.startsWith('Zone 4')); const sel = [...c.querySelectorAll('select')][1]; return [...sel.options].map(o => Number(o.value)).filter(g => g >= 0); })()`);
+  check("a plain-contact zone is offered pins beyond the analog ones", digitalPins.some(g => g > 10), JSON.stringify(digitalPins.slice(0, 20)));
+  await ev(`(() => { const c = [...document.querySelectorAll('section.card')].find(x => x.querySelector('h2')?.textContent.startsWith('Zone 4')); const sel = [...c.querySelectorAll('select')][0]; sel.value = 'loop'; sel.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await sleep(200);
   // a repeated identifier is refused by the node and the panel says so
   await ev(`(() => { const c = [...document.querySelectorAll('section.card')].find(x => x.querySelector('h2')?.textContent.startsWith('Zone 2')); const ins = c.querySelectorAll('input[type=text]'); ins[0].value = 'front-door'; ins[0].dispatchEvent(new Event('input', { bubbles: true })); })()`);
   await clickButton("Save"); await sleep(900);
@@ -146,10 +156,19 @@ try {
   const savedZb = await (await fetch("http://127.0.0.1:18122/api/v1/config", { headers: { Cookie: cookie } })).json();
   check("with the time set the Zigbee zone and the siren are saved", savedZb.config.zigbee_local.after_s === 60 && savedZb.config.zigbee_local.sirens[0] === "00158d0001ffee01" && savedZb.config.zones[2].zigbee === "00158d0001a2b3c4", JSON.stringify(savedZb.config.zigbee_local));
   await goto("zones");
-  check("a Zigbee zone says it has not been heard", (await text()).includes("not heard yet"), (await text()).slice(0, 200));
+  await sleep(2500);   // the live readings are polled
+  check("a Zigbee zone says it has not been heard", (await text()).includes("not heard yet"), await ev(`[...document.querySelectorAll("section.card")].find(x => x.querySelector("h2")?.textContent.startsWith("Zone 3"))?.innerText`));
   await goto("io");
   body = await text();
   check("the relays page has the siren note, the broker switch and eight relays", body.includes("is the siren") && body.includes("Let the broker move the relays") && [1, 2, 8].every(n => body.includes(`Relay ${n}`)) && !body.includes("Analog inputs"), body.slice(0, 300));
+  check("the direct API for a central is offered with its token", body.includes("Let a central read and command this node over HTTP"));
+  await ev(`(() => { const box = [...document.querySelectorAll('label')].find(l => l.textContent.includes('Let a central read')); box.querySelector('input').click(); })()`);
+  await sleep(300);
+  check("turning it on shows how to use the token and a button to make one", (await text()).includes("Authorization: Bearer") && (await text()).includes("Generate a new token"));
+  await ev(`document.getElementById('remote-token-generate').click()`);
+  await sleep(300);
+  const shownToken = await ev(`document.getElementById('remote-token-shown') ? document.getElementById('remote-token-shown').textContent : ''`);
+  check("a generated token is long, shown once and put in the settings", /^[0-9a-f]{48}$/.test(shownToken) && (await text()).includes("Copy it now"), shownToken);
 
   // ---- the firmware page can ask GitHub for a newer version (every node has it)
   await goto("update");

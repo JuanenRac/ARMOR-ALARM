@@ -11,6 +11,8 @@ namespace armor::api {
 std::string version_text();
 std::string status_json();          // node, network, broker and the alarm, as the Overview page shows them
 std::string zones_json();           // {"alarm":{...},"zones":[...],"catalog":[...]}: the alarm, each zone with what its pin reads, and the pins the board offers
+// What a central that holds the node's token reads: {"node_id":..,"alarm":{..},"zones":[{id,state,..}],"relays":[..]}.
+std::string remote_state_json();
 std::string io_json();              // {"zigbee":{...},"relays":[...],"remote":{...}}: the Zigbee bridge and the relay outputs of the base board
 std::string config_get_json();      // {"config":{...},"channel_auto":n,"firmware":"x.y.z"}: no password ever leaves the node
 // The same document the flash keeps, secrets and all: an admin downloading the node's whole configuration to load onto an identical

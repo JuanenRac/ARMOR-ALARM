@@ -25,16 +25,29 @@ namespace armor::config {
 
 constexpr std::size_t kZoneCount = board::kAnalogCount;   // a wired zone is read by an analog pin, so there are as many as the board has
 
-// One wired zone: a loop on an analog pin. `kind` says when it matters (alarm::ZoneKind); the reading must hold `hold_ms` to count (the debouncer).
+// One wired zone: a loop on an analog pin (`input` "loop": an end-of-line resistor, four states) or a plain contact on a digital pin (`input` "digital": a switch to ground, two states,
+// `contact` "nc" or "no", and `role` "contact" or "tamper" for the switch of a box). `kind` says when it matters (alarm::ZoneKind); the reading must hold `hold_ms` to count (the debouncer).
 struct ZoneSetting {
   bool enabled = false;
   std::string id;           // lowercase letters, digits, - and _ : what the zone is called in the messages
   std::string name;         // what a person calls it ("Front door")
-  int pin = -1;             // wired: the analog pin of its loop
+  int pin = -1;             // wired: the analog pin of its loop, or the digital pin of its contact
+  std::string input = "loop";     // "loop" (analog, end-of-line resistor) or "digital" (a contact to ground, the pin pulled up)
+  std::string contact = "nc";      // digital: "nc" (closed while all is well, triggered when it opens) or "no" (open while all is well, triggered when it closes)
+  std::string role = "contact";    // digital: "contact" (triggered) or "tamper" (the switch of a box: says tamper)
   std::string zigbee;       // a Zigbee sensor instead: its long (IEEE) address as 16 hexadecimal digits; the pin is then not used
   alarm::ZoneKind kind = alarm::ZoneKind::kInstant;
   int hold_ms = 200;
   bool is_zigbee() const { return !zigbee.empty(); }
+  bool is_digital() const { return !is_zigbee() && input == "digital"; }
+};
+
+// A push button that arms the panel (no PIN: anyone may leave; disarming is only ever done with the PIN): a switch to ground on a digital pin, the pin pulled up.
+constexpr std::size_t kButtonCount = 4;
+struct ButtonSetting {
+  bool enabled = false;
+  std::string action = "arm_away";   // "arm_away" or "arm_stay"
+  int pin = -1;
 };
 
 // The node taking the radio over: after the server's Zigbee2MQTT has been away for `after_s` seconds (0: never) the node speaks Zigbee itself, reads the sensors of the zones that name one and
@@ -59,6 +72,7 @@ struct ServerLink {
 
 struct Settings : NodeSettings, IoSettings {
   std::array<ZoneSetting, kZoneCount> zones;
+  std::array<ButtonSetting, kButtonCount> buttons;
   alarm::LoopLimits loop;
   PanelSetting panel;
   ServerLink server;
@@ -103,10 +117,25 @@ inline void read_settings(const json::Value& document, Settings& s, Problems& pr
       read_text(item, "name", zone.name, 40, base + "name", problems);
       read_int(item, "pin", zone.pin, -1, board::kLastGpio, base + "pin", problems);
       read_text(item, "zigbee", zone.zigbee, 16, base + "zigbee", problems);
+      read_text(item, "input", zone.input, 8, base + "input", problems);
+      read_text(item, "contact", zone.contact, 2, base + "contact", problems);
+      read_text(item, "role", zone.role, 8, base + "role", problems);
       read_int(item, "hold_ms", zone.hold_ms, 20, 5000, base + "hold_ms", problems);
       if (const json::Value* kind = item.get("kind"); kind != nullptr) {
         if (!kind->is_string() || !alarm::parse_kind(kind->text, zone.kind)) bad(problems, base + "kind", "invalid");
       }
+    }
+  }
+  if (const json::Value* buttons = document.get("buttons"); buttons != nullptr) {
+    if (!buttons->is_array() || buttons->items.size() > kButtonCount) bad(problems, "buttons", "invalid");
+    else for (std::size_t i = 0; i < buttons->items.size(); ++i) {
+      const json::Value& item = buttons->items[i];
+      const std::string base = "buttons." + std::to_string(i) + ".";
+      if (!item.is_object()) { bad(problems, base + "enabled", "invalid"); continue; }
+      ButtonSetting& button = s.buttons[i];
+      read_bool(item, "enabled", button.enabled, base + "enabled", problems);
+      read_text(item, "action", button.action, 10, base + "action", problems);
+      read_int(item, "pin", button.pin, -1, board::kLastGpio, base + "pin", problems);
     }
   }
   if (const json::Value* loop = document.get("loop"); loop != nullptr && loop->is_object()) {
@@ -159,7 +188,7 @@ inline Problems validate(const Settings& s) {
   // the zones: each has its own name and its own analog pin
   std::vector<std::string> ids;
   std::vector<std::uint64_t> addresses;
-  std::size_t enabled = 0;
+  std::size_t enabled = 0, loops = 0;
   for (std::size_t i = 0; i < kZoneCount; ++i) {
     const ZoneSetting& zone = s.zones[i];
     if (!zone.enabled) continue;
@@ -178,11 +207,31 @@ inline Problems validate(const Settings& s) {
       if (s.zigbee_local.after_s == 0) bad(problems, base + "zigbee", "needs_local");
       continue;
     }
+    if (zone.input != "loop" && zone.input != "digital") bad(problems, base + "input", "invalid");
+    if (zone.is_digital()) {
+      // a plain contact on any pin the board lets be an input (the relay pins left unused are the natural place)
+      if (zone.contact != "nc" && zone.contact != "no") bad(problems, base + "contact", "invalid");
+      if (zone.role != "contact" && zone.role != "tamper") bad(problems, base + "role", "invalid");
+      if (zone.pin < 0) bad(problems, base + "pin", "required");
+      else if (!board::assignable(zone.pin)) bad(problems, base + "pin", "reserved");
+      else if (!claims.claim(zone.pin, "zone" + std::to_string(i + 1))) bad(problems, base + "pin", "conflict");
+      continue;
+    }
+    ++loops;
     if (zone.pin < 0) bad(problems, base + "pin", "required");
     else if (!board::analog_capable(zone.pin)) bad(problems, base + "pin", board::assignable(zone.pin) ? "not_analog" : "reserved");
     else if (!claims.claim(zone.pin, "zone" + std::to_string(i + 1))) bad(problems, base + "pin", "conflict");
   }
-  if (enabled > 0 && !alarm::limits_are_valid(s.loop)) bad(problems, "loop.short_below_mv", "range");
+  for (std::size_t i = 0; i < kButtonCount; ++i) {
+    const ButtonSetting& button = s.buttons[i];
+    if (!button.enabled) continue;
+    const std::string base = "buttons." + std::to_string(i) + ".";
+    if (button.action != "arm_away" && button.action != "arm_stay") bad(problems, base + "action", "invalid");
+    if (button.pin < 0) bad(problems, base + "pin", "required");
+    else if (!board::assignable(button.pin)) bad(problems, base + "pin", "reserved");
+    else if (!claims.claim(button.pin, "button" + std::to_string(i + 1))) bad(problems, base + "pin", "conflict");
+  }
+  if (loops > 0 && !alarm::limits_are_valid(s.loop)) bad(problems, "loop.short_below_mv", "range");
 
   // the panel: a PIN of four to twelve digits as soon as there is anything to guard, and a siren that is one of the relays
   if (!s.panel.pin.empty() && !pin_is_valid(s.panel.pin)) bad(problems, "panel.pin", "invalid");
@@ -210,8 +259,11 @@ inline std::string to_json(const Settings& s, bool secrets) {
   node_write_head(w, s, secrets);
   w.key("zones").begin_array();
   for (const ZoneSetting& zone : s.zones) {
-    w.begin_object().field("enabled", zone.enabled).field("id", zone.id).field("name", zone.name).field("pin", zone.pin).field("zigbee", zone.zigbee).field("kind", alarm::kind_text(zone.kind)).field("hold_ms", zone.hold_ms).end_object();
+    w.begin_object().field("enabled", zone.enabled).field("id", zone.id).field("name", zone.name).field("pin", zone.pin).field("zigbee", zone.zigbee).field("input", zone.input).field("contact", zone.contact).field("role", zone.role).field("kind", alarm::kind_text(zone.kind)).field("hold_ms", zone.hold_ms).end_object();
   }
+  w.end_array();
+  w.key("buttons").begin_array();
+  for (const ButtonSetting& button : s.buttons) w.begin_object().field("enabled", button.enabled).field("action", button.action).field("pin", button.pin).end_object();
   w.end_array();
   w.key("loop").begin_object().key("short_below_mv").number(s.loop.short_below_mv).key("normal_below_mv").number(s.loop.normal_below_mv).key("triggered_below_mv").number(s.loop.triggered_below_mv).end_object();
   w.key("panel").begin_object().field("exit_delay_s", static_cast<long long>(s.panel.timing.exit_delay_s)).field("entry_delay_s", static_cast<long long>(s.panel.timing.entry_delay_s))
@@ -223,7 +275,7 @@ inline std::string to_json(const Settings& s, bool secrets) {
   w.key("zigbee_local").begin_object().field("after_s", s.zigbee_local.after_s).key("sirens").begin_array();
   for (const std::string& siren : s.zigbee_local.sirens) if (!siren.empty()) w.string(siren);
   w.end_array().end_object();
-  io_write(w, s);
+  io_write(w, s, secrets);
   node_write_tail(w, s);
   w.end_object();
   return w.str();
