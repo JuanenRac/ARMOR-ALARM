@@ -26,7 +26,7 @@
 
 ---
 
-**Ehrlichkeitsprüfung - was heute läuft:** **Reifegrad: Scaffolding.** Es gibt den **Kern der Alarmanlage** (was eine Zone ist, wie eine vom ADC gelesene verdrahtete Schleife zum Zustand wird, die Regeln der Zentrale: Scharfschalten, Verzögerungen, der Alarm, die Sirene, die PIN mit Sperre) und die darauf gebaute **Firmware des Knotens** (Einstellungen, Webpanel, Nachrichten mit dem Server, Brücke des Zigbee-Funks und Relais), die für beide Platinen kompiliert; der Kern, die Einstellungen, die Nachrichten und das Panel in einem echten Browser gegen einen Stellvertreterknoten sind auf einem Rechner mit 492.368 Prüfungen getestet. **Nichts lief auf einer Platine oder in einer echten Anlage, keine Zone wurde verdrahtet und keine Sirene angeschlossen, die eigene Zigbee-Kommunikation des Knotens mit einem Koordinator (das Funkmodul vom Server übernehmen) ist geschrieben und gegen einen simulierten Koordinator getestet, aber nie mit einem echten Koordinator oder echten Sensoren gelaufen, und dies ist keine zertifizierte Alarmanlage.**
+**Ehrlichkeitsprüfung - was heute läuft:** **Reifegrad: Scaffolding.** Es gibt den **Kern der Alarmanlage** (was eine Zone ist, wie eine vom ADC gelesene verdrahtete Schleife zum Zustand wird, die Regeln der Zentrale: Scharfschalten, Verzögerungen, der Alarm, die Sirene, die PIN mit Sperre) und die darauf gebaute **Firmware des Knotens** (Einstellungen, Webpanel, Nachrichten mit dem Server, Brücke des Zigbee-Funks und Relais), die für beide Platinen kompiliert; der Kern, die Einstellungen, die Nachrichten und das Panel in einem echten Browser gegen einen Stellvertreterknoten sind auf einem Rechner mit 496.185 Prüfungen getestet. **Nichts lief auf einer Platine oder in einer echten Anlage, keine Zone wurde verdrahtet und keine Sirene angeschlossen, die eigene Zigbee-Kommunikation des Knotens mit einem Koordinator (das Funkmodul vom Server übernehmen) ist geschrieben und gegen einen simulierten Koordinator getestet, aber nie mit einem echten Koordinator oder echten Sensoren gelaufen, und dies ist keine zertifizierte Alarmanlage.**
 
 ---
 
@@ -39,6 +39,7 @@
 * **Der Plan:** ein Gateway auf der Platine des Elektroknotens (Zigbee-Funk, verdrahtete Zonen, Sirenenrelais), das mit ARMOR-SERVER arbeitet und **weiter überwacht, wenn der Server fehlt**: eine Zentrale übernimmt das Funkmodul vom Server über die Zigbee-Brücke von ARMOR-ELECTRICAL. Siehe [den Entwurf](docs/DESIGN.md) und [die Übernahme](docs/FAILOVER.md).
 * **Der Knoten:** Firmware für den ESP32-S3 (PoE-Ethernet oder WLAN) mit bis zu acht verdrahteten Zonen, der Sirene an einem Relais, dem Webpanel aller Knoten in sieben Sprachen, dem an Zigbee2MQTT verliehenen Zigbee-Funk und den Nachrichten `armor/alarm/<Knoten>/state|command|result`; der Server darf nur scharf- und unscharfschalten, wenn drei unabhängige Schalter es erlauben. Siehe [die Firmware](docs/NODE_FIRMWARE.md), [die Nachrichten](docs/ALARM_MESSAGES.md) und [die Hardware](docs/HARDWARE.md).
 * **Funkmodul übernehmen:** ist Zigbee2MQTT des Servers eine festgelegte Zeit weg, startet der Knoten den Koordinator selbst (ZNP), liest die Sensoren der Zonen, die einen nennen (IAS Zone), und steuert Zigbee-Sirenen (IAS WD); er gibt es frei, sobald der Client zurück ist. **Noch nicht:** ein echter Koordinator oder Sensor, die Hardware und jeder Test an einer echten Anlage.
+* **Ein Neustart schaltet das Haus nicht unscharf:** Modus, ein laufender Alarm und die ausgeschlossenen Zonen werden im Flash gehalten und beim Start zurückgeholt; eine unterbrochene oder kurzgeschlossene Schleife wird nie ausgeschlossen; Nachrichten laufen über eine Warteschlange (kein Deadlock mit dem Broker), und der Watchdog startet die Platine neu, wenn die Aufgabe, die die Zonen liest, stehen bleibt.
 
 ## 📂 Struktur des Repositorys
 
@@ -56,7 +57,7 @@ ARMOR-ALARM/
 ## 🛠️ Entwicklungsumgebung
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,368 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 496.185 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Siehe [den Entwurf](docs/DESIGN.md), [wie die Zentrale vom Server übernimmt](docs/FAILOVER.md) und die [Sicherheitshinweise](docs/SAFETY.md).
@@ -77,6 +78,7 @@ Siehe [den Entwurf](docs/DESIGN.md), [wie die Zentrale vom Server übernimmt](do
 * **[ARMOR-STUDIO](https://github.com/JuanenRac/ARMOR-STUDIO)** - Web-Konsole: Kameras, Radar, Alarme, Solarenergie und 2D/3D-Standortdesigner
 * **[ARMOR-ANDROID-CONTROL](https://github.com/JuanenRac/ARMOR-ANDROID-CONTROL)** - Android-Bedienclient mit Live-Radar in 2D/3D
 * **[ARMOR-SERVER-AI](https://github.com/JuanenRac/ARMOR-SERVER-AI)** - Visuelle Inferenzrichtlinie, die ihre Entscheidungen erklärt und nie handelt
+* **[ARMOR-VISION](https://github.com/JuanenRac/ARMOR-VISION)** - Kamerazonen, Masken und Erkennungsregeln für den Jetson Orin NX
 * **[ARMOR-VOICE-AI](https://github.com/JuanenRac/ARMOR-VOICE-AI)** - Offline-Sprachabsichten mit einer nicht fälschbaren Bestätigung
 * **[ARMOR-HARDWARE](https://github.com/JuanenRac/ARMOR-HARDWARE)** - Gehäuse, Elektronik und die Abnahmematrix am Prüfstand
 * **[ARMOR-DEVOPS](https://github.com/JuanenRac/ARMOR-DEVOPS)** - Bereitstellung, CM5-Prüfstand, Backup und TLS

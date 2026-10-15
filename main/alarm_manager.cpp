@@ -18,6 +18,9 @@ extern "C" {
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_task_wdt.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 }
 #include "core/local_zigbee.hpp"
 #include "mqtt_link.hpp"
@@ -40,6 +43,34 @@ int g_siren_relay = -1;
 bool g_siren_on = false;
 std::string g_last_signature;
 std::uint64_t g_last_publish_ms = 0;
+
+// What a restart must not forget (see alarm::Panel::saved): the mode, a running alarm and the zones left out are kept in flash whenever they change and taken back at start, so that a
+// power cut, a reset by the watchdog or an update leaves the house guarded, not open. The text in flash is the one line core/alarm_panel.hpp writes and reads.
+constexpr char kStateNamespace[] = "alarm_state";
+constexpr char kStateKey[] = "panel";
+std::string g_saved_text;   // what is in flash now
+
+bool read_saved(std::string& out) {
+  nvs_handle_t handle;
+  if (nvs_open(kStateNamespace, NVS_READONLY, &handle) != ESP_OK) return false;
+  std::size_t size = 0;
+  bool ok = false;
+  if (nvs_get_str(handle, kStateKey, nullptr, &size) == ESP_OK && size > 0 && size <= 512) {
+    out.resize(size);
+    ok = nvs_get_str(handle, kStateKey, out.data(), &size) == ESP_OK;
+    if (ok) out.resize(size - 1);
+  }
+  nvs_close(handle);
+  return ok;
+}
+
+bool write_saved(const std::string& text) {
+  nvs_handle_t handle;
+  if (nvs_open(kStateNamespace, NVS_READWRITE, &handle) != ESP_OK) return false;
+  const bool ok = nvs_set_str(handle, kStateKey, text.c_str()) == ESP_OK && nvs_commit(handle) == ESP_OK;
+  nvs_close(handle);
+  return ok;
+}
 
 // The node speaking Zigbee itself while the radio is its own (see zigbee_bridge.hpp): the bridge's task drives it; the alarm task takes what the sensors said out of it and tells it when the siren
 // is on. It has its own lock because those are two tasks.
@@ -170,8 +201,12 @@ void alarm_task(void*) {
       }
     }
   }
+  // A task that stops turning (a lock that is never given back, a driver that hangs) must not leave the house unguarded for ever: the watchdog restarts the board, and the saved state
+  // brings it back armed.
+  esp_task_wdt_add(nullptr);
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(kStepMs));
+    esp_task_wdt_reset();
     const std::uint64_t now = now_ms();
     std::array<double, config::kZoneCount> millivolts{};
     std::array<bool, config::kZoneCount> read{};
@@ -188,6 +223,8 @@ void alarm_task(void*) {
         if (taken > 0) { millivolts[i] = static_cast<double>(sum) / taken; read[i] = true; }
       }
     }
+    std::string to_save;
+    {
     std::lock_guard<std::mutex> guard(g_lock);
     for (std::size_t i = 0; i < config::kZoneCount; ++i) if (read[i]) g_runner->feed(i, millivolts[i], now);
     for (std::size_t i = 0; i < config::kZoneCount; ++i) if (digital_ready[i]) g_runner->feed_digital(i, gpio_get_level(static_cast<gpio_num_t>(g_settings.zones[i].pin)) != 0, now);
@@ -208,6 +245,14 @@ void alarm_task(void*) {
     g_runner->tick(now);
     drive_siren_locked();
     publish_state_locked(false);
+    const std::string now_saved = alarm::saved_text(g_runner->saved());
+    if (now_saved != g_saved_text) to_save = now_saved;
+    }
+    // flash is written outside the lock: a write can take tens of milliseconds
+    if (!to_save.empty()) {
+      if (write_saved(to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_text = to_save; }
+      else ESP_LOGE(kTag, "the state of the panel could not be saved: a restart would leave it disarmed");
+    }
   }
 }
 }  // namespace
@@ -216,6 +261,14 @@ void start(const config::Settings& settings, Publish publish) {
   g_settings = settings;
   g_publish = std::move(publish);
   g_runner = std::make_unique<alarm::Runner>(settings);
+  {
+    std::string text;
+    alarm::Panel::Saved saved;
+    g_saved_text = alarm::saved_text(g_runner->saved());   // disarmed
+    if (read_saved(text) && alarm::parse_saved(text, saved)) {
+      if (g_runner->restore(saved, now_ms())) { ESP_LOGW(kTag, "the node restarted while the panel was %s (%s): it is armed again", alarm::phase_text(saved.phase), text.c_str()); g_saved_text = alarm::saved_text(g_runner->saved()); }
+    } else if (!text.empty()) ESP_LOGW(kTag, "the saved state of the panel is not readable and was ignored");
+  }
   g_siren_relay = settings.panel.siren_relay.empty() ? -1 : relay_outputs::index_of(settings.panel.siren_relay);
   if (!settings.panel.siren_relay.empty() && g_siren_relay < 0) ESP_LOGE(kTag, "the siren relay \"%s\" is not an enabled relay: there is no siren", settings.panel.siren_relay.c_str());
   if (settings.zigbee_local.after_s != 0 && settings.zigbee.enabled) {

@@ -122,6 +122,14 @@ class Runner {
     return reply;
   }
 
+  // What a restart must not forget (see Panel::saved): the manager keeps it in flash when it changes and gives it back at start.
+  Panel::Saved saved() const { return panel_.saved(); }
+  bool restore(const Panel::Saved& saved, std::uint64_t now_ms) {
+    const bool armed = panel_.restore(saved, now_ms);
+    for (ZoneView& view : views_) if (view.enabled) view.bypassed = panel_.bypassed(view.id);
+    return armed;
+  }
+
   bool siren() const { return panel_.siren(); }
   const Panel& panel() const { return panel_; }
   const std::array<ZoneView, config::kZoneCount>& zones() const { return views_; }

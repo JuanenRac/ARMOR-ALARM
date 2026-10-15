@@ -26,7 +26,7 @@
 
 ---
 
-**正直さのチェック - 今日動いているもの：** **成熟度：scaffolding。** 存在するのは**警報のコア**（警戒区域とは何か、ADC が読む配線ループがどう状態になるか、警報盤のルール：警戒セット、遅延、警報、サイレン、ロックアウト付き PIN）と、その上に作られた**ノードのファームウェア**（設定、Web パネル、サーバーとのメッセージ、Zigbee 無線のブリッジとリレー）で、両方の基板向けにビルドできます。コア、設定、メッセージ、そして模擬ノードに対して実ブラウザで動かしたパネルは、コンピューターで 492,368 件のチェックを通過しています。**基板や実際の設備では動作しておらず、区域の配線もサイレンの接続もしておらず、ノード自身がコーディネーターと行う Zigbee 通信（サーバーから無線を引き継ぐ）は作成済みで模擬コーディネーターに対してテスト済みですが、実機のコーディネーターやセンサーでは一度も動作しておらず、、認証された警報システムではありません。**
+**正直さのチェック - 今日動いているもの：** **成熟度：scaffolding。** 存在するのは**警報のコア**（警戒区域とは何か、ADC が読む配線ループがどう状態になるか、警報盤のルール：警戒セット、遅延、警報、サイレン、ロックアウト付き PIN）と、その上に作られた**ノードのファームウェア**（設定、Web パネル、サーバーとのメッセージ、Zigbee 無線のブリッジとリレー）で、両方の基板向けにビルドできます。コア、設定、メッセージ、そして模擬ノードに対して実ブラウザで動かしたパネルは、コンピューターで 496,185 件のチェックを通過しています。**基板や実際の設備では動作しておらず、区域の配線もサイレンの接続もしておらず、ノード自身がコーディネーターと行う Zigbee 通信（サーバーから無線を引き継ぐ）は作成済みで模擬コーディネーターに対してテスト済みですが、実機のコーディネーターやセンサーでは一度も動作しておらず、、認証された警報システムではありません。**
 
 ---
 
@@ -39,6 +39,7 @@
 * **計画：** 電気ノードの基板上のゲートウェイ（Zigbee 無線、配線区域、サイレン用リレー）。ARMOR-SERVER と連携し、**サーバーが不在でも警戒を続けます**：警報盤が ARMOR-ELECTRICAL の Zigbee ブリッジ経由でサーバーから無線を引き継ぎます。[設計](docs/DESIGN.md)と[引き継ぎ](docs/FAILOVER.md)を参照。
 * **ノード：** ESP32-S3 用ファームウェア（PoE イーサネットまたは Wi-Fi）。最大 8 つの配線区域、リレーに接続したサイレン、全ノード共通の 7 言語の Web パネル、Zigbee2MQTT に貸し出す Zigbee 無線、そしてメッセージ `armor/alarm/<ノード>/state|command|result`。サーバーが警戒セット・解除できるのは、独立した 3 つのスイッチがすべて許可した場合だけです。[ファームウェア](docs/NODE_FIRMWARE.md)、[メッセージ](docs/ALARM_MESSAGES.md)、[ハードウェア](docs/HARDWARE.md)を参照。
 * **無線の引き継ぎ：** サーバーの Zigbee2MQTT が設定時間いないと、ノードが自分でコーディネーターを起動し（ZNP）、センサーを指定した区域を読み取り（IAS Zone）、Zigbee サイレンを制御し（IAS WD）、クライアントが戻った瞬間に手放します。**まだ：** 実機のコーディネーターやセンサー、ハードウェア、実際の設備でのテスト。
+* **再起動しても家の警戒は解除されません：** モード、進行中の警報、除外したゾーンはフラッシュに保存され、起動時に復元されます。断線や短絡したループは決して除外されません。メッセージはキューを通る（ブローカーとのデッドロックなし）ため、ゾーンを読むタスクが止まるとウォッチドッグが基板を再起動します。
 
 ## 📂 リポジトリの構成
 
@@ -56,7 +57,7 @@ ARMOR-ALARM/
 ## 🛠️ 開発環境
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,368 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 496,185 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 [設計](docs/DESIGN.md)、[警報盤がサーバーから引き継ぐ方法](docs/FAILOVER.md)、[安全に関する注意](docs/SAFETY.md)を参照してください。
@@ -77,6 +78,7 @@ cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir bui
 * **[ARMOR-STUDIO](https://github.com/JuanenRac/ARMOR-STUDIO)** - Web コンソール：カメラ、レーダー、アラーム、太陽光発電、2D/3D サイト設計
 * **[ARMOR-ANDROID-CONTROL](https://github.com/JuanenRac/ARMOR-ANDROID-CONTROL)** - リアルタイム 2D/3D レーダー付きの Android オペレータークライアント
 * **[ARMOR-SERVER-AI](https://github.com/JuanenRac/ARMOR-SERVER-AI)** - 判断を説明し、決して動作しない視覚推論ポリシー
+* **[ARMOR-VISION](https://github.com/JuanenRac/ARMOR-VISION)** - Jetson Orin NX 向けのカメラのゾーン、マスク、検知ルール
 * **[ARMOR-VOICE-AI](https://github.com/JuanenRac/ARMOR-VOICE-AI)** - 偽造できない確認を備えたオフライン音声インテント
 * **[ARMOR-HARDWARE](https://github.com/JuanenRac/ARMOR-HARDWARE)** - 筐体、電子部品、ベンチ受け入れマトリクス
 * **[ARMOR-DEVOPS](https://github.com/JuanenRac/ARMOR-DEVOPS)** - デプロイ、CM5 テストベンチ、バックアップ、TLS

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## [0.2.2] - A restart no longer disarms the house; no deadlock; sabotage cannot be left out
+
+- **The armed state is kept in flash** (mode, an alarm that was running, the zones left out) every time it changes and taken back at start: a power cut, a reset by the watchdog, an update or the automatic restart no longer leave the central disarmed. An exit delay that was running comes back armed; an entry delay that was running (nobody had disarmed) comes back as an alarm. A record that is not exactly a saved state arms nothing.
+- **A message is never published while a lock of the node is held:** `mqtt_link::publish()` puts the message in a short queue (48, the oldest dropped first) and a task of its own hands it to the client. Before, a task that held a lock of its module and published could wait for the client's own lock while the client, running the handler of an incoming command, waited for that module lock: both for ever, with nothing to restart the board.
+- **The task watchdog restarts the board:** it panics after 10 s (it only printed before) and the tasks that guard the outputs now report to it. The siren relay's own task reports as well.
+- **A cut or shorted loop (tamper) is never left out:** forcing an arming is refused while a loop is in tamper, and a zone that was left out still sounds when its wire is cut.
+- An alarm with the central disarmed (a smoke, gas or panic zone, or a tamper) is now accepted by the server and the contract (ARMOR-COMMON 0.4.6). Host tests: restart and sabotage scenarios added.
+
 ## [0.2.1] - Plain contacts, buttons and a central that needs no broker
 
 - **Plain contacts as zones.** A zone can be a switch to ground on any free pin instead of a loop with an end-of-line resistor (`input: digital`): the node pulls the pin up, a closed contact reads low, and the zone says triggered when a contact that is closed while all is well opens (`contact: nc`) or when one that is open while all is well closes (`contact: no`, a panic button or the dry output of a sensor). With `role: tamper` the switch of a box or a detector's lid says tamper, which raises the alarm in every state of the system. A digital zone needs no loop limits and is debounced like the others. The panel's *Zones* page asks for the kind of input, the contact and the role; the pins offered are every pin the board allows, not only the analog ones.

@@ -26,7 +26,7 @@
 
 ---
 
-**诚实性检查 - 今天真正能运行的部分：** **成熟度：scaffolding。** 目前存在的是**报警核心**（什么是防区、ADC 读取的有线回路如何变成状态、主机的规则：布防、延时、报警、警笛、带锁定的 PIN）以及建立在其上的**节点固件**（设置、网页面板、与服务器的消息、Zigbee 无线电桥接和继电器），可为两种电路板编译；核心、设置、消息以及在真实浏览器中对着模拟节点运行的面板，已在电脑上通过 492,368 项检查。**没有在电路板或真实设施上运行过，没有接过任何防区线路或警笛，节点自己与协调器的 Zigbee 通信（从服务器接管无线电）已编写并对模拟协调器测试过，但从未对真实的协调器或传感器运行过，这也不是经过认证的报警系统。**
+**诚实性检查 - 今天真正能运行的部分：** **成熟度：scaffolding。** 目前存在的是**报警核心**（什么是防区、ADC 读取的有线回路如何变成状态、主机的规则：布防、延时、报警、警笛、带锁定的 PIN）以及建立在其上的**节点固件**（设置、网页面板、与服务器的消息、Zigbee 无线电桥接和继电器），可为两种电路板编译；核心、设置、消息以及在真实浏览器中对着模拟节点运行的面板，已在电脑上通过 496,185 项检查。**没有在电路板或真实设施上运行过，没有接过任何防区线路或警笛，节点自己与协调器的 Zigbee 通信（从服务器接管无线电）已编写并对模拟协调器测试过，但从未对真实的协调器或传感器运行过，这也不是经过认证的报警系统。**
 
 ---
 
@@ -39,6 +39,7 @@
 * **计划：** 在电气节点电路板上的网关（Zigbee 无线电、有线防区、警笛继电器），与 ARMOR-SERVER 配合，并在**服务器离线时继续守护**：主机通过 ARMOR-ELECTRICAL 的 Zigbee 桥接从服务器手中接管无线电。参见[设计](docs/DESIGN.md)和[接管](docs/FAILOVER.md)。
 * **节点：** ESP32-S3 固件（PoE 以太网或 Wi-Fi），最多八个有线防区，警笛接在继电器上，所有节点通用的七种语言网页面板，借给 Zigbee2MQTT 的 Zigbee 无线电，以及消息 `armor/alarm/<节点>/state|command|result`；只有三个相互独立的开关都允许时，服务器才能布防和撤防。参见[固件](docs/NODE_FIRMWARE.md)、[消息](docs/ALARM_MESSAGES.md)和[硬件](docs/HARDWARE.md)。
 * **接管无线电：** 服务器的 Zigbee2MQTT 缺席设定时间后，节点自行启动协调器（ZNP），读取指定了传感器的防区（IAS Zone）并控制 Zigbee 警笛（IAS WD），客户端一回来就交还。**尚未完成：** 真实的协调器或传感器、硬件，以及在真实设施上的任何测试。
+* **重启不会让房子撤防：** 模式、正在进行的报警和被旁路的防区保存在闪存中，启动时恢复；被剪断或短路的回路永远不会被旁路；消息经队列发送（与代理不会死锁），读取防区的任务停止时看门狗会重启开发板。
 
 ## 📂 仓库结构
 
@@ -56,7 +57,7 @@ ARMOR-ALARM/
 ## 🛠️ 开发环境
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,368 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 496,185 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 参见[设计](docs/DESIGN.md)、[主机如何接替服务器](docs/FAILOVER.md)和[安全说明](docs/SAFETY.md)。
@@ -77,6 +78,7 @@ cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir bui
 * **[ARMOR-STUDIO](https://github.com/JuanenRac/ARMOR-STUDIO)** - 网页控制台：摄像头、雷达、报警、太阳能和 2D/3D 场地设计器
 * **[ARMOR-ANDROID-CONTROL](https://github.com/JuanenRac/ARMOR-ANDROID-CONTROL)** - 带实时 2D/3D 雷达的 Android 操作员客户端
 * **[ARMOR-SERVER-AI](https://github.com/JuanenRac/ARMOR-SERVER-AI)** - 会解释决策且从不执行动作的视觉推理策略
+* **[ARMOR-VISION](https://github.com/JuanenRac/ARMOR-VISION)** - Jetson Orin NX 上的摄像头区域、遮罩与检测规则
 * **[ARMOR-VOICE-AI](https://github.com/JuanenRac/ARMOR-VOICE-AI)** - 带无法伪造确认的离线语音意图
 * **[ARMOR-HARDWARE](https://github.com/JuanenRac/ARMOR-HARDWARE)** - 外壳、电子器件和台架验收矩阵
 * **[ARMOR-DEVOPS](https://github.com/JuanenRac/ARMOR-DEVOPS)** - 部署、CM5 测试台、备份与 TLS

@@ -26,7 +26,7 @@
 
 ---
 
-**Vérification d'honnêteté - ce qui fonctionne aujourd'hui :** **Maturité : scaffolding.** Ce qui existe est le **cœur de l'alarme** (ce qu'est une zone, comment une boucle câblée lue par le CAN devient un état, les règles de la centrale : armement, temporisations, l'alarme, la sirène, le PIN avec verrouillage) et le **firmware du nœud** construit dessus (réglages, panneau web, messages avec le serveur, pont de la radio Zigbee et relais), qui se compile pour les deux cartes ; le cœur, les réglages, les messages et le panneau dans un vrai navigateur face à un nœud simulé sont testés sur un ordinateur par 492 368 contrôles. **Rien n'a tourné sur une carte ni sur une installation réelle, aucune zone n'a été câblée ni aucune sirène branchée, la conversation Zigbee du nœud lui-même avec un coordinateur (reprendre la radio au serveur) est écrite et testée contre un coordinateur simulé, mais jamais avec un vrai coordinateur ni de vrais capteurs, et ce n'est pas une centrale d'alarme certifiée.**
+**Vérification d'honnêteté - ce qui fonctionne aujourd'hui :** **Maturité : scaffolding.** Ce qui existe est le **cœur de l'alarme** (ce qu'est une zone, comment une boucle câblée lue par le CAN devient un état, les règles de la centrale : armement, temporisations, l'alarme, la sirène, le PIN avec verrouillage) et le **firmware du nœud** construit dessus (réglages, panneau web, messages avec le serveur, pont de la radio Zigbee et relais), qui se compile pour les deux cartes ; le cœur, les réglages, les messages et le panneau dans un vrai navigateur face à un nœud simulé sont testés sur un ordinateur par 496 185 contrôles. **Rien n'a tourné sur une carte ni sur une installation réelle, aucune zone n'a été câblée ni aucune sirène branchée, la conversation Zigbee du nœud lui-même avec un coordinateur (reprendre la radio au serveur) est écrite et testée contre un coordinateur simulé, mais jamais avec un vrai coordinateur ni de vrais capteurs, et ce n'est pas une centrale d'alarme certifiée.**
 
 ---
 
@@ -39,6 +39,7 @@
 * **Le plan :** une passerelle sur la carte du nœud électrique (radio Zigbee, zones câblées, relais de sirène) qui travaille avec ARMOR-SERVER et **continue de surveiller quand le serveur est absent** : une centrale reprend la radio au serveur par le pont Zigbee d'ARMOR-ELECTRICAL. Voir [la conception](docs/DESIGN.md) et [la reprise](docs/FAILOVER.md).
 * **Le nœud :** firmware pour l'ESP32-S3 (Ethernet PoE ou Wi-Fi) avec jusqu'à huit zones câblées, la sirène sur un relais, le panneau web de tous les nœuds en sept langues, la radio Zigbee prêtée à Zigbee2MQTT et les messages `armor/alarm/<nœud>/state|command|result` ; le serveur ne peut armer et désarmer que si trois interrupteurs indépendants l'autorisent. Voir [le firmware](docs/NODE_FIRMWARE.md), [les messages](docs/ALARM_MESSAGES.md) et [le matériel](docs/HARDWARE.md).
 * **Prendre la radio :** quand Zigbee2MQTT du serveur est absent depuis un temps donné, le nœud démarre lui-même le coordinateur (ZNP), lit les capteurs des zones qui en nomment un (IAS Zone) et commande des sirènes Zigbee (IAS WD), et la rend dès que le client revient. **Pas encore :** un vrai coordinateur ou capteur, le matériel et tout essai sur une installation réelle.
+* **Un redémarrage ne désarme pas la maison :** le mode, une alarme en cours et les zones exclues sont gardés en flash et repris au démarrage ; une boucle coupée ou en court-circuit n'est jamais exclue ; les messages passent par une file (pas d'interblocage avec le broker) et le chien de garde redémarre la carte si la tâche qui lit les zones s'arrête.
 
 ## 📂 Structure du dépôt
 
@@ -56,7 +57,7 @@ ARMOR-ALARM/
 ## 🛠️ Environnement de développement
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 492,368 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 496 185 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Voir [la conception](docs/DESIGN.md), [comment la centrale prend le relais du serveur](docs/FAILOVER.md) et les [notes de sécurité](docs/SAFETY.md).
@@ -77,6 +78,7 @@ Voir [la conception](docs/DESIGN.md), [comment la centrale prend le relais du se
 * **[ARMOR-STUDIO](https://github.com/JuanenRac/ARMOR-STUDIO)** - Console web : caméras, radar, alarmes, énergie solaire et concepteur de site 2D/3D
 * **[ARMOR-ANDROID-CONTROL](https://github.com/JuanenRac/ARMOR-ANDROID-CONTROL)** - Client Android de l'opérateur avec radar 2D/3D en direct
 * **[ARMOR-SERVER-AI](https://github.com/JuanenRac/ARMOR-SERVER-AI)** - Politique d'inférence visuelle qui explique ses décisions et n'agit jamais
+* **[ARMOR-VISION](https://github.com/JuanenRac/ARMOR-VISION)** - Zones de caméra, masques et règles de détection pour la Jetson Orin NX
 * **[ARMOR-VOICE-AI](https://github.com/JuanenRac/ARMOR-VOICE-AI)** - Intentions vocales hors ligne avec une confirmation impossible à falsifier
 * **[ARMOR-HARDWARE](https://github.com/JuanenRac/ARMOR-HARDWARE)** - Boîtiers, électronique et matrice d'acceptation sur banc
 * **[ARMOR-DEVOPS](https://github.com/JuanenRac/ARMOR-DEVOPS)** - Déploiement, banc d'essai CM5, sauvegarde et TLS

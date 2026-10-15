@@ -93,7 +93,8 @@ class Panel {
     const std::vector<std::string> open = open_zones(mode);
     if (!open.empty() && !force) return Refusal::kZonesOpen;
     // A smoke detector or a panic button that is sounding is never left out, forced or not: it is the one thing that must be looked at first.
-    for (const std::string& id : open) if (find(id)->zone.kind == ZoneKind::kAlways) return Refusal::kZonesOpen;
+    // A cut or shorted loop (tamper) is never left out either: forcing an arming must not hide a sabotage.
+    for (const std::string& id : open) if (find(id)->zone.kind == ZoneKind::kAlways || find(id)->state == ZoneState::kTamper) return Refusal::kZonesOpen;
     for (Slot& s : slots_) s.bypassed = false;
     for (const std::string& id : open) { find(id)->bypassed = true; note(now_ms, EventKind::kZoneBypassed, id); }
     mode_ = mode;
@@ -143,6 +144,36 @@ class Panel {
     if (locked_until_ms_ != 0 && now_ms >= locked_until_ms_) { locked_until_ms_ = 0; }
   }
 
+  // ---- what a restart must not forget ----
+  // A power cut, a watchdog reset or an update must not leave the house unguarded: the node keeps the mode, whether an alarm was running and the zones left out, and takes them back at
+  // start. An exit delay that was running comes back as armed; an entry delay that was running (somebody was inside, not yet disarmed) comes back as an alarm.
+  struct Saved {
+    Phase phase = Phase::kDisarmed;
+    Mode mode = Mode::kDisarmed;
+    std::vector<std::string> bypassed;
+    bool operator==(const Saved& other) const { return phase == other.phase && mode == other.mode && bypassed == other.bypassed; }
+  };
+  Saved saved() const {
+    Saved out;
+    if (phase_ == Phase::kDisarmed && !siren_on_) return out;
+    out.mode = mode_;
+    out.phase = (phase_ == Phase::kAlarm || phase_ == Phase::kEntryDelay) ? Phase::kAlarm : (phase_ == Phase::kDisarmed ? Phase::kDisarmed : Phase::kArmed);
+    for (const Slot& s : slots_) if (s.bypassed) out.bypassed.push_back(s.zone.id);
+    return out;
+  }
+  // Takes the saved state back. Returns true when the panel is not disarmed afterwards.
+  bool restore(const Saved& saved, std::uint64_t now_ms) {
+    if (phase_ != Phase::kDisarmed || saved.phase == Phase::kDisarmed || saved.mode == Mode::kDisarmed) return false;
+    for (Slot& s : slots_) s.bypassed = false;
+    for (const std::string& id : saved.bypassed) if (Slot* s = find(id)) s->bypassed = true;
+    mode_ = saved.mode;
+    phase_ = Phase::kArmed;
+    phase_since_ms_ = now_ms;
+    note(now_ms, EventKind::kArmed, "");
+    if (saved.phase == Phase::kAlarm) raise(now_ms, "");
+    return true;
+  }
+
  private:
   struct Slot {
     Zone zone;
@@ -190,7 +221,7 @@ class Panel {
 
   // A zone has just changed to triggered or tamper (or was found so when the exit delay ended).
   void react(Slot& s, std::uint64_t now_ms) {
-    if (s.bypassed) return;
+    if (s.bypassed && s.state != ZoneState::kTamper) return;   // a zone left out ignores its contact, never its sabotage
     if (s.state == ZoneState::kTamper || s.zone.kind == ZoneKind::kAlways) { raise(now_ms, s.zone.id); return; }   // in every state, even disarmed
     switch (phase_) {
       case Phase::kDisarmed: case Phase::kExitDelay: case Phase::kAlarm: return;
@@ -216,5 +247,29 @@ class Panel {
   std::uint32_t wrong_pins_ = 0;
   std::string entry_zone_;
 };
+
+// The saved state as one line the flash can hold: "armed|away|front-door,window" (the phase, the mode, the zones left out). Anything that is not exactly that is not a saved state
+// (a damaged record never arms a panel at random).
+inline std::string saved_text(const Panel::Saved& saved) {
+  std::string text = std::string(phase_text(saved.phase)) + "|" + (saved.mode == Mode::kAway ? "away" : saved.mode == Mode::kStay ? "stay" : "disarmed") + "|";
+  for (std::size_t i = 0; i < saved.bypassed.size(); ++i) text += (i ? "," : "") + saved.bypassed[i];
+  return text;
+}
+inline bool parse_saved(const std::string& text, Panel::Saved& out) {
+  const std::size_t first = text.find('|'), second = first == std::string::npos ? first : text.find('|', first + 1);
+  if (second == std::string::npos || text.size() > 400) return false;
+  Panel::Saved saved;
+  const std::string phase = text.substr(0, first), mode = text.substr(first + 1, second - first - 1);
+  if (phase == "armed") saved.phase = Phase::kArmed; else if (phase == "alarm") saved.phase = Phase::kAlarm; else if (phase == "disarmed") saved.phase = Phase::kDisarmed; else return false;
+  if (mode == "away") saved.mode = Mode::kAway; else if (mode == "stay") saved.mode = Mode::kStay; else if (mode == "disarmed") saved.mode = Mode::kDisarmed; else return false;
+  if ((saved.phase == Phase::kDisarmed) != (saved.mode == Mode::kDisarmed) && saved.phase != Phase::kAlarm) return false;
+  std::string id;
+  for (std::size_t i = second + 1; i <= text.size(); ++i) {
+    if (i == text.size() || text[i] == ',') { if (!id.empty()) saved.bypassed.push_back(id); id.clear(); }
+    else id += text[i];
+  }
+  out = saved;
+  return true;
+}
 
 }  // namespace armor::alarm

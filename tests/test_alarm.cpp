@@ -303,6 +303,63 @@ static void test_random() {
   }
 }
 
+// ---- what a restart must not forget; sabotage that cannot be left out ----------------------------------------------------------------------
+
+static void test_restart_and_tamper() {
+  // armed away with a window left out, then the power goes: the panel comes back armed, with the same window left out
+  Panel before(quick(), house(), "1234");
+  before.set_zone("window", ZoneState::kTriggered, 0);
+  CHECK(before.arm(Mode::kAway, true, 0) == Refusal::kNone);
+  before.tick(11000);
+  CHECK(before.phase() == Phase::kArmed && before.bypassed("window"));
+  const Panel::Saved saved = before.saved();
+  CHECK(saved.phase == Phase::kArmed && saved.mode == Mode::kAway && saved.bypassed.size() == 1 && saved.bypassed[0] == "window");
+  Panel::Saved read;
+  CHECK(parse_saved(saved_text(saved), read) && read == saved);
+  Panel after(quick(), house(), "1234");
+  CHECK(after.restore(read, 50));
+  CHECK(after.phase() == Phase::kArmed && after.mode() == Mode::kAway && after.bypassed("window") && !after.siren());
+  after.set_zone("front-door", ZoneState::kTriggered, 100);   // it guards: the entry delay starts
+  CHECK(after.phase() == Phase::kEntryDelay);
+  // an exit delay that was running comes back armed; an entry delay that was running comes back as an alarm; a sounding alarm sounds again
+  Panel exiting(quick(), house(), "1234");
+  CHECK(exiting.arm(Mode::kStay, false, 0) == Refusal::kNone && exiting.phase() == Phase::kExitDelay && exiting.saved().phase == Phase::kArmed);
+  Panel entering(quick(), house(), "1234");
+  entering.arm(Mode::kAway, false, 0); entering.tick(11000); entering.set_zone("front-door", ZoneState::kTriggered, 12000);
+  CHECK(entering.phase() == Phase::kEntryDelay && entering.saved().phase == Phase::kAlarm);
+  Panel again(quick(), house(), "1234");
+  CHECK(again.restore(entering.saved(), 5) && again.phase() == Phase::kAlarm && again.siren());
+  // a disarmed panel saves nothing and restores nothing; a record that is not exactly a saved state arms nothing
+  Panel quiet(quick(), house(), "1234");
+  CHECK(quiet.saved().phase == Phase::kDisarmed && !quiet.restore(quiet.saved(), 0) && quiet.phase() == Phase::kDisarmed);
+  Panel::Saved junk;
+  for (const char* text : {"", "armed", "armed|away", "armed|sideways|", "dancing|away|", "armed|disarmed|", "disarmed|away|", "armed|away|"})
+    if (parse_saved(text, junk)) { Panel p(quick(), house(), "1234"); CHECK(!(junk.phase != Phase::kDisarmed && junk.mode == Mode::kDisarmed && p.restore(junk, 0))); }
+  CHECK(!parse_saved("armed|sideways|", junk) && !parse_saved("armed|disarmed|", junk) && !parse_saved("disarmed|away|", junk) && !parse_saved("armed|away", junk));
+  CHECK(parse_saved("alarm|stay|window,front-door", junk) && junk.bypassed.size() == 2);
+  // sabotage: forcing an arming does not leave a cut loop out, and a zone that is left out still sounds when its wire is cut
+  Panel cut(quick(), house(), "1234");
+  cut.set_zone("window", ZoneState::kTamper, 0);   // 24 hours: it sounds even disarmed
+  CHECK(cut.phase() == Phase::kAlarm);
+  CHECK(cut.disarm("1234", 1) == Refusal::kNone);
+  cut.set_zone("window", ZoneState::kTamper, 2);   // no change
+  Panel forced(quick(), house(), "1234");
+  forced.set_zone("hall-motion", ZoneState::kTriggered, 0);
+  CHECK(forced.arm(Mode::kAway, true, 1) == Refusal::kNone && forced.bypassed("hall-motion"));
+  forced.tick(11000);
+  forced.set_zone("hall-motion", ZoneState::kTamper, 12000);
+  CHECK(forced.phase() == Phase::kAlarm);
+  Panel blocked(quick(), house(), "1234");
+  blocked.set_zone("front-door", ZoneState::kTamper, 0);   // tamper raises an alarm even disarmed ...
+  blocked.disarm("1234", 1);
+  blocked.set_zone("front-door", ZoneState::kTamper, 2);
+  Panel stuck(quick(), house(), "1234");
+  stuck.set_zone("window", ZoneState::kNormal, 0);
+  stuck.set_zone("hall-motion", ZoneState::kTriggered, 0);
+  stuck.set_zone("window", ZoneState::kTamper, 1); stuck.disarm("1234", 2);   // the loop stays cut after the alarm was silenced
+  CHECK(stuck.arm(Mode::kAway, true, 3) == Refusal::kZonesOpen && stuck.phase() == Phase::kDisarmed);
+}
+
 int main() {
   test_loop();
   test_zone_names();
@@ -317,6 +374,7 @@ int main() {
   test_pin_and_lockout();
   test_siren_times_out();
   test_zero_delays_and_log();
+  test_restart_and_tamper();
   test_random();
   std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
