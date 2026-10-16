@@ -171,6 +171,8 @@ class Runner {
     }
   }
 
+  void set_epoch(std::int64_t epoch) { panel_.set_epoch(epoch); }
+  void restore_events(std::vector<Event> older) { panel_.restore_events(std::move(older)); }
   bool siren() const { return panel_.siren(); }
   const Panel& panel() const { return panel_; }
   const std::array<ZoneView, config::kZoneCount>& zones() const { return views_; }

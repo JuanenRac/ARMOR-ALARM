@@ -61,13 +61,63 @@ inline std::string state_json(const std::string& node_id, std::uint64_t timestam
   const std::vector<Event>& events = panel.events();
   const std::size_t first = events.size() > kMaxReportedEvents ? events.size() - kMaxReportedEvents : 0;
   for (std::size_t i = first; i < events.size(); ++i) {
-    w.begin_object().key("ago_s").integer(static_cast<long long>(now_ms >= events[i].at_ms ? (now_ms - events[i].at_ms) / 1000ULL : 0)).field("kind", event_text(events[i].kind));
+    long long ago = 0;
+    if (events[i].restored) {
+      // an event of before the restart is aged by the wall clock; with no real time yet its age is unknown, so it is not told
+      if (panel.epoch() == 0 || events[i].epoch == 0 || panel.epoch() < events[i].epoch) continue;
+      ago = panel.epoch() - events[i].epoch;
+    } else ago = static_cast<long long>(now_ms >= events[i].at_ms ? (now_ms - events[i].at_ms) / 1000ULL : 0);
+    w.begin_object().key("ago_s").integer(ago).field("kind", event_text(events[i].kind));
     if (!events[i].zone.empty()) w.field("zone", events[i].zone);
     w.end_object();
   }
   w.end_array();
   w.end_object();
   return w.str();
+}
+
+// ---- the events kept in flash: "epoch,kind,zone;..." for the last few that happened while the node had real time ----------------------------
+
+constexpr std::size_t kSavedEvents = 10;
+
+inline std::string events_text(const std::vector<Event>& events) {
+  std::string out;
+  std::size_t count = 0;
+  for (std::size_t i = events.size(); i > 0 && count < kSavedEvents; --i) {
+    const Event& event = events[i - 1];
+    if (event.epoch == 0) continue;
+    if (count > 0) out.insert(0, ";");
+    out.insert(0, std::to_string(event.epoch) + "," + event_text(event.kind) + "," + event.zone);
+    ++count;
+  }
+  return out;
+}
+
+inline std::vector<Event> parse_events(const std::string& text) {
+  std::vector<Event> out;
+  std::size_t start = 0;
+  while (start < text.size()) {
+    std::size_t end = text.find(';', start);
+    if (end == std::string::npos) end = text.size();
+    const std::string item = text.substr(start, end - start);
+    start = end + 1;
+    const std::size_t a = item.find(','), b = a == std::string::npos ? a : item.find(',', a + 1);
+    if (b == std::string::npos || a == 0 || a > 12) continue;
+    bool digits = true;
+    for (std::size_t i = 0; i < a; ++i) if (item[i] < '0' || item[i] > '9') digits = false;
+    if (!digits) continue;
+    const std::string kind = item.substr(a + 1, b - a - 1);
+    for (int k = 0; k <= static_cast<int>(EventKind::kZoneBypassed); ++k) {
+      if (kind != event_text(static_cast<EventKind>(k))) continue;
+      Event event;
+      event.kind = static_cast<EventKind>(k);
+      event.epoch = std::stoll(item.substr(0, a));
+      event.zone = item.substr(b + 1);
+      if (event.zone.size() <= 32) out.push_back(event);
+      break;
+    }
+  }
+  return out;
 }
 
 // ---- the command and its answer -----------------------------------------------------------------------------------------------------

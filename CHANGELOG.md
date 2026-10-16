@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.0] - The last events survive a restart
+
+- **Events kept across a restart:** the last ten events of the panel (armed, alarm, disarmed, bad PIN...) are written to flash while the node has real time and come back after a power cut, a watchdog reset or an update, told as "seconds ago" by the wall clock. Before the clock is set their age is unknown, so they are not told.
+- The zone identifier field has its own help text (it showed the name of another node's field), and the four arming buttons are numbered #1 to #4.
+- A host test covers writing the events, reading them back, ageing them by the wall clock and refusing what is not readable.
+
 ## [0.2.9] - A Zigbee coordinator on the network and the Bluetooth PIN in the panel
 
 - **Signed firmware:** a node installs from GitHub only a firmware whose signature verifies. Each release carries, next to the image and its SHA-256, an Ed25519 signature of that hash (`<image>.sig`); the node downloads the image, hashes it and installs it only when the hash is the published one and the signature verifies with the public key of the releases, which is in the firmware (the private key never leaves the maintainer's computer). A release without a signature, or with a wrong one, is refused and nothing changes.

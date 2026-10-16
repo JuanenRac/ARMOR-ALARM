@@ -22,6 +22,7 @@ extern "C" {
 #include "nvs.h"
 #include "nvs_flash.h"
 }
+#include "clock_sync.hpp"
 #include "core/local_zigbee.hpp"
 #include "mqtt_link.hpp"
 #include "relay_outputs.hpp"
@@ -49,6 +50,33 @@ std::uint64_t g_last_publish_ms = 0;
 constexpr char kStateNamespace[] = "alarm_state";
 constexpr char kStateKey[] = "panel";
 std::string g_saved_text;   // what is in flash now
+constexpr char kEventsKey[] = "events";
+std::string g_saved_events;   // the events in flash now (the last few that happened while the node had real time, so a restart does not forget what happened)
+
+// The wall-clock second, or 0 while the node has no real time.
+std::int64_t wall_epoch() { return clocksync::is_set() ? clocksync::info().epoch : 0; }
+
+bool read_events(std::string& out) {
+  nvs_handle_t handle;
+  if (nvs_open(kStateNamespace, NVS_READONLY, &handle) != ESP_OK) return false;
+  std::size_t size = 0;
+  bool ok = false;
+  if (nvs_get_str(handle, kEventsKey, nullptr, &size) == ESP_OK && size > 0 && size <= 1024) {
+    out.resize(size);
+    ok = nvs_get_str(handle, kEventsKey, out.data(), &size) == ESP_OK;
+    if (ok) out.resize(size - 1);
+  }
+  nvs_close(handle);
+  return ok;
+}
+
+bool write_events(const std::string& text) {
+  nvs_handle_t handle;
+  if (nvs_open(kStateNamespace, NVS_READWRITE, &handle) != ESP_OK) return false;
+  const bool ok = nvs_set_str(handle, kEventsKey, text.c_str()) == ESP_OK && nvs_commit(handle) == ESP_OK;
+  nvs_close(handle);
+  return ok;
+}
 
 bool read_saved(std::string& out) {
   nvs_handle_t handle;
@@ -229,9 +257,10 @@ void alarm_task(void*) {
         if (taken > 0) { millivolts[i] = static_cast<double>(sum) / taken; read[i] = true; }
       }
     }
-    std::string to_save;
+    std::string to_save, events_to_save;
     {
     std::lock_guard<std::mutex> guard(g_lock);
+    g_runner->set_epoch(wall_epoch());
     for (std::size_t i = 0; i < config::kZoneCount; ++i) if (read[i]) g_runner->feed(i, millivolts[i], now);
     for (std::size_t i = 0; i < config::kZoneCount; ++i) if (digital_ready[i]) g_runner->feed_digital(i, gpio_get_level(static_cast<gpio_num_t>(g_settings.zones[i].pin)) != 0, now);
     bool pressed = false;
@@ -254,7 +283,10 @@ void alarm_task(void*) {
     publish_state_locked(false);
     const std::string now_saved = alarm::saved_text(g_runner->saved());
     if (now_saved != g_saved_text) to_save = now_saved;
+    const std::string now_events = alarm::events_text(g_runner->panel().events());
+    if (!now_events.empty() && now_events != g_saved_events) events_to_save = now_events;
     }
+    if (!events_to_save.empty() && write_events(events_to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_events = events_to_save; }
     // flash is written outside the lock: a write can take tens of milliseconds
     if (!to_save.empty()) {
       if (write_saved(to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_text = to_save; }
@@ -276,6 +308,10 @@ void start(const config::Settings& settings, Publish publish) {
       if (g_runner->restore(saved, now_ms())) { ESP_LOGW(kTag, "the node restarted while the panel was %s (%s): it is armed again", alarm::phase_text(saved.phase), text.c_str()); g_saved_text = alarm::saved_text(g_runner->saved()); }
     } else if (!text.empty()) ESP_LOGW(kTag, "the saved state of the panel is not readable and was ignored");
   }
+  {
+    std::string text;
+    if (read_events(text)) { g_saved_events = text; g_runner->restore_events(alarm::parse_events(text)); }
+  }
   g_siren_relay = settings.panel.siren_relay.empty() ? -1 : relay_outputs::index_of(settings.panel.siren_relay);
   if (!settings.panel.siren_relay.empty() && g_siren_relay < 0) ESP_LOGE(kTag, "the siren relay \"%s\" is not an enabled relay: there is no siren", settings.panel.siren_relay.c_str());
   if (settings.zigbee_local.after_s != 0 && settings.zigbee.enabled) {
@@ -293,6 +329,7 @@ void start(const config::Settings& settings, Publish publish) {
 
 std::string state_json() {
   std::lock_guard<std::mutex> guard(g_lock);
+  if (g_runner) g_runner->set_epoch(wall_epoch());
   return g_runner ? g_runner->state_json(stamp_ms(), now_ms()) : "{}";
 }
 

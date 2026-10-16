@@ -44,6 +44,8 @@ struct Event {
   std::uint64_t at_ms = 0;
   EventKind kind = EventKind::kArmed;
   std::string zone;   // the zone that caused it, when one did
+  std::int64_t epoch = 0;   // the wall-clock second it happened at, 0 while the node had no real time
+  bool restored = false;    // read back from flash after a restart: its age comes from `epoch`, not from the node's own clock
 };
 
 inline const char* phase_text(Phase p) {
@@ -70,6 +72,15 @@ class Panel {
   bool siren() const { return siren_on_; }
   bool locked_out(std::uint64_t now_ms) const { return locked_until_ms_ != 0 && now_ms < locked_until_ms_; }
   const std::vector<Event>& events() const { return events_; }
+  // The wall-clock second now (0 while the node has no real time): the events noted from here on carry it, and the ones restored from flash are aged by it.
+  void set_epoch(std::int64_t epoch) { epoch_ = epoch; }
+  std::int64_t epoch() const { return epoch_; }
+  // The events a restart brought back from flash go before the ones of this run.
+  void restore_events(std::vector<Event> older) {
+    for (Event& event : older) event.restored = true;
+    events_.insert(events_.begin(), older.begin(), older.end());
+    if (events_.size() > kMaxEvents) events_.erase(events_.begin(), events_.begin() + static_cast<std::ptrdiff_t>(events_.size() - kMaxEvents));
+  }
   // The zones that would stop an arming in `mode` right now.
   std::vector<std::string> open_zones(Mode mode) const {
     std::vector<std::string> out;
@@ -212,7 +223,7 @@ class Panel {
 
   void note(std::uint64_t at, EventKind kind, const std::string& zone) {
     if (events_.size() >= kMaxEvents) events_.erase(events_.begin());
-    events_.push_back({at, kind, zone});
+    events_.push_back({at, kind, zone, epoch_, false});
   }
 
   void finish_exit(std::uint64_t now_ms) {
@@ -252,6 +263,7 @@ class Panel {
   std::string pin_;
   std::vector<Slot> slots_;
   std::vector<Event> events_;
+  std::int64_t epoch_ = 0;
   Phase phase_ = Phase::kDisarmed;
   Mode mode_ = Mode::kDisarmed;
   bool siren_on_ = false;

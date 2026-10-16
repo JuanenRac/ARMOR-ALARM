@@ -284,6 +284,39 @@ static void test_state_follows_the_panel() {
   CHECK(state.get("zones")->items.size() == 4);
 }
 
+// ---- the events a restart does not forget ----------------------------------------------------------------------------------------------
+
+static void test_events_survive_a_restart() {
+  config::Settings s = house();
+  alarm::Runner node(s);
+  std::uint64_t now = 0;
+  const std::vector<double> quiet{kClosed, kClosed, kClosed, kClosed};
+  run(node, now, 1000, quiet);
+  node.set_epoch(1000000);            // the node has real time
+  node.arm(alarm::Mode::kAway, false, now);
+  run(node, now, 11000, quiet);
+  node.set_epoch(1000040);
+  run(node, now, 300, {kClosed, kOpen, kClosed, kClosed});
+  const std::string kept = alarm::events_text(node.panel().events());
+  CHECK(!kept.empty() && kept.find("1000000,") != std::string::npos);
+  // the node restarts: a new runner takes the events back and ages them by the wall clock
+  alarm::Runner again(s);
+  again.restore_events(alarm::parse_events(kept));
+  json::Value state;
+  again.set_epoch(0);                 // no real time yet: the old events are not told (their age is unknown)
+  CHECK(json::parse(again.state_json(1, 5000), state) && state.get("events")->items.empty());
+  again.set_epoch(1000100);
+  CHECK(json::parse(again.state_json(2, 5000), state));
+  const json::Value* events = state.get("events");
+  CHECK(events != nullptr && events->items.size() >= 3);
+  CHECK(events->items.back().string_or("kind", "") == "alarm" && events->items.back().string_or("zone", "") == "window");
+  const json::Value* ago = events->items.back().get("ago_s");
+  CHECK(ago != nullptr && ago->number >= 59 && ago->number <= 61);
+  // an event noted before the node had real time is not kept, and what is not readable is dropped
+  CHECK(alarm::parse_events("garbage;12,nope,x;abc,armed,;5,armed,front").size() == 1);
+  CHECK(alarm::events_text({}).empty());
+}
+
 // ---- digital contacts and buttons ----------------------------------------------------------------------------------------------------
 
 static void test_digital_zones_and_buttons_settings() {
@@ -419,6 +452,7 @@ int main() {
   test_debounce_and_tamper();
   test_server_commands();
   test_state_follows_the_panel();
+  test_events_survive_a_restart();
   std::printf("%d checks, %d failures\n", checks, failures);
   test_digital_zones_and_buttons_settings();
   test_digital_contacts();
