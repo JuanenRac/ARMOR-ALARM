@@ -35,6 +35,9 @@ struct Timing {
   std::uint32_t siren_max_s = 180;
   std::uint32_t lockout_after = 3;   // wrong PINs in a row
   std::uint32_t lockout_s = 60;
+  // A Zigbee sensor that says nothing for this many minutes is taken as lost (a flat battery, a jammed radio): while the system is armed it counts as tamper, because a dead sensor is how
+  // a perimeter is defeated. 0 turns it off (a sensor that only reports when it changes would otherwise be taken for lost).
+  std::uint32_t zigbee_silence_min = 0;
 };
 
 struct Event {

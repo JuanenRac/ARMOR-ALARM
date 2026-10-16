@@ -242,6 +242,7 @@ void alarm_task(void*) {
       if (!g_host->ready()) g_zigbee_siren_told = false;                    // a radio that is not ours cannot be told anything; it is told again when it is
       else if (g_siren_on != g_zigbee_siren_told) { g_host->siren(g_siren_on, g_settings.panel.timing.siren_max_s); g_zigbee_siren_told = g_siren_on; }
     }
+    g_runner->radio_held(g_host && g_host->ready(), now);
     g_runner->tick(now);
     drive_siren_locked();
     publish_state_locked(false);

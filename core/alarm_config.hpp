@@ -151,6 +151,7 @@ inline void read_settings(const json::Value& document, Settings& s, Problems& pr
     value = static_cast<int>(t.siren_max_s); read_int(*panel, "siren_max_s", value, 1, 3600, "panel.siren_max_s", problems); t.siren_max_s = static_cast<std::uint32_t>(value);
     value = static_cast<int>(t.lockout_after); read_int(*panel, "lockout_after", value, 1, 20, "panel.lockout_after", problems); t.lockout_after = static_cast<std::uint32_t>(value);
     value = static_cast<int>(t.lockout_s); read_int(*panel, "lockout_s", value, 1, 3600, "panel.lockout_s", problems); t.lockout_s = static_cast<std::uint32_t>(value);
+    value = static_cast<int>(t.zigbee_silence_min); read_int(*panel, "zigbee_silence_min", value, 0, 1440, "panel.zigbee_silence_min", problems); t.zigbee_silence_min = static_cast<std::uint32_t>(value);
     read_secret(*panel, "pin", s.panel.pin, "panel.pin", problems);
     read_text(*panel, "siren_relay", s.panel.siren_relay, 32, "panel.siren_relay", problems);
   }
@@ -268,7 +269,7 @@ inline std::string to_json(const Settings& s, bool secrets) {
   w.key("loop").begin_object().key("short_below_mv").number(s.loop.short_below_mv).key("normal_below_mv").number(s.loop.normal_below_mv).key("triggered_below_mv").number(s.loop.triggered_below_mv).end_object();
   w.key("panel").begin_object().field("exit_delay_s", static_cast<long long>(s.panel.timing.exit_delay_s)).field("entry_delay_s", static_cast<long long>(s.panel.timing.entry_delay_s))
       .field("siren_max_s", static_cast<long long>(s.panel.timing.siren_max_s)).field("lockout_after", static_cast<long long>(s.panel.timing.lockout_after))
-      .field("lockout_s", static_cast<long long>(s.panel.timing.lockout_s)).field("siren_relay", s.panel.siren_relay);
+      .field("lockout_s", static_cast<long long>(s.panel.timing.lockout_s)).field("zigbee_silence_min", static_cast<long long>(s.panel.timing.zigbee_silence_min)).field("siren_relay", s.panel.siren_relay);
   if (secrets) w.field("pin", s.panel.pin); else w.field("pin_set", !s.panel.pin.empty());
   w.end_object();
   w.key("server").begin_object().field("commands", s.server.commands).end_object();

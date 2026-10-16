@@ -630,6 +630,7 @@ function panelPage() {
       el("section", { class: "card" }, el("h2", {}, t("panelTimes")),
         el("div", { class: "row" }, field("panelExit", "panel.exit_delay_s", { type: "number", min: 0, max: 600 }), field("panelEntry", "panel.entry_delay_s", { type: "number", min: 0, max: 600 })),
         field("panelSiren", "panel.siren_max_s", { type: "number", min: 1, max: 3600 }),
+        field("panelZigbeeSilence", "panel.zigbee_silence_min", { type: "number", min: 0, max: 1440 }),
         el("div", { class: "row" }, field("panelLockAfter", "panel.lockout_after", { type: "number", min: 1, max: 20 }), field("panelLockFor", "panel.lockout_s", { type: "number", min: 1, max: 3600 }))),
       el("section", { class: "card" }, el("h2", {}, t("panelPinTitle")),
         el("label", { class: "field" }, el("span", {}, t("panelPin")), pin, S.problems["panel.pin"] ? el("span", { class: "err" }, problemText(S.problems["panel.pin"])) : null, el("span", { class: "hint" }, t("panelPinHint"))),
@@ -693,11 +694,18 @@ function uploadFirmware(file, progressBar, label, done) {
 
 async function githubCheck() {
   S.github.busy = true; S.github.error = ""; render();
-  const r = await api("GET", "ota/check");
-  S.github.busy = false;
-  if (r.ok && r.data.ok) { S.github.checked = true; S.github.available = r.data.update_available; S.github.latest = r.data.latest_version; }
-  else { S.github.checked = true; S.github.available = false; S.github.error = errorText((r.data && r.data.error) || "network"); }
-  render();
+  // The look for a release is done by the node in a task of its own: it is started, and asked about every second or so.
+  const start = await api("POST", "ota/check", {});
+  if (!start.ok) { S.github.busy = false; S.github.checked = true; S.github.available = false; S.github.error = errorText((start.data && start.data.error) || "network"); render(); return; }
+  const poll = async (tries) => {
+    const r = await api("GET", "ota/check");
+    if (r.ok && r.data.state === "checking" && tries < 40) { setTimeout(() => poll(tries + 1), 800); return; }
+    S.github.busy = false;
+    if (r.ok && r.data.ok) { S.github.checked = true; S.github.available = r.data.update_available; S.github.latest = r.data.latest_version; }
+    else { S.github.checked = true; S.github.available = false; S.github.error = errorText((r.data && r.data.error) || "network"); }
+    render();
+  };
+  setTimeout(() => poll(0), 800);
 }
 // The install runs in the node (a task of its own): this starts it and asks, twice a second, how far it is - the bar of the file upload, for the download.
 async function githubInstall() {

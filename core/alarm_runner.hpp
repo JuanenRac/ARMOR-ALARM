@@ -31,6 +31,8 @@ struct ZoneView {
   bool pin_high = false;      // what a digital zone's pin read last
   bool zigbee = false;        // a Zigbee sensor, not a wired loop: it has no millivolts, and a reading only when the node holds the radio
   bool battery_low = false;   // what a Zigbee sensor says of its battery
+  bool silent = false;        // a Zigbee sensor that has not been heard for longer than the limit of the settings (see Timing::zigbee_silence_min)
+  std::uint64_t heard_ms = 0; // when a Zigbee sensor was last heard
 };
 
 // The answer to a command from the server.
@@ -95,6 +97,8 @@ class Runner {
     for (ZoneView& view : views_) {
       if (!view.enabled || !view.zigbee || view.id != zone_id) continue;
       view.has_reading = true;
+      view.heard_ms = now_ms;
+      view.silent = false;
       view.state = state;
       view.battery_low = battery_low;
       panel_.set_zone(view.id, state, now_ms);
@@ -104,6 +108,7 @@ class Runner {
 
   void tick(std::uint64_t now_ms) {
     panel_.tick(now_ms);
+    supervise_zigbee(now_ms);
     for (ZoneView& view : views_) if (view.enabled) view.bypassed = panel_.bypassed(view.id);
   }
 
@@ -130,6 +135,28 @@ class Runner {
     return armed;
   }
 
+  // A Zigbee sensor that went quiet is lost (a flat battery, an inhibited radio) and must not keep its last "normal": past the limit it is marked silent and, while the system is armed
+  // or arming, its zone says tamper until it is heard again. With the limit at 0 nothing is supervised. A sensor never heard since the start is not judged (nothing to compare with).
+  // Whether the radio is this node's: the sensors only reach it while it holds the radio (the server holds it otherwise), so what is not heard then says nothing. Every time the radio is
+  // not ours the sensors are given their whole allowance again from the moment it becomes ours.
+  void radio_held(bool held, std::uint64_t now_ms) {
+    if (!held) for (ZoneView& view : views_) if (view.zigbee) { view.heard_ms = now_ms; view.silent = false; }
+    radio_ = held;
+  }
+
+  void supervise_zigbee(std::uint64_t now_ms) {
+    if (!radio_) return;
+    const std::uint64_t limit = static_cast<std::uint64_t>(settings_.panel.timing.zigbee_silence_min) * 60000ULL;
+    if (limit == 0) return;
+    for (ZoneView& view : views_) {
+      if (!view.enabled || !view.zigbee || !view.has_reading) continue;
+      const bool quiet = now_ms - view.heard_ms > limit;
+      if (quiet == view.silent) { if (quiet && panel_.phase() != Phase::kDisarmed && view.state != ZoneState::kTamper) { view.state = ZoneState::kTamper; panel_.set_zone(view.id, ZoneState::kTamper, now_ms); } continue; }
+      view.silent = quiet;
+      if (quiet && panel_.phase() != Phase::kDisarmed) { view.state = ZoneState::kTamper; panel_.set_zone(view.id, ZoneState::kTamper, now_ms); }
+    }
+  }
+
   bool siren() const { return panel_.siren(); }
   const Panel& panel() const { return panel_; }
   const std::array<ZoneView, config::kZoneCount>& zones() const { return views_; }
@@ -144,6 +171,7 @@ class Runner {
   std::string result_json(std::uint64_t timestamp_ms, const Reply& reply) const { return alarm::result_json(settings_.node_id, timestamp_ms, reply.command, reply.refusal, panel_.phase()); }
 
  private:
+  bool radio_ = false;
   static std::vector<Zone> zones_of(const config::Settings& settings) {
     std::vector<Zone> zones;
     for (const config::ZoneSetting& zone : settings.zones) if (zone.enabled) zones.push_back({zone.id, zone.name, zone.kind});

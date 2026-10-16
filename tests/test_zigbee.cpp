@@ -317,6 +317,39 @@ static void test_runner() {
   CHECK(node.zones()[1].state == alarm::ZoneState::kNormal);
 }
 
+static void test_silent_sensor() {
+  config::Settings s = valid_settings();
+  s.zigbee.enabled = true;
+  s.zones[0].enabled = true; s.zones[0].id = "front-door"; s.zones[0].kind = alarm::ZoneKind::kInstant; s.zones[0].zigbee = "00158d0001a2b3c4"; s.zones[0].pin = -1;
+  s.panel.pin = "1234"; s.panel.timing.exit_delay_s = 1; s.panel.timing.entry_delay_s = 5; s.panel.timing.siren_max_s = 60; s.panel.timing.zigbee_silence_min = 10;
+  alarm::Runner node(s);
+  std::uint64_t now = 0;
+  node.radio_held(true, now);
+  node.feed_zigbee("front-door", alarm::ZoneState::kNormal, false, now);
+  CHECK(node.arm(alarm::Mode::kAway, false, now) == alarm::Refusal::kNone);
+  for (int i = 0; i < 30; ++i) { now += 100; node.tick(now); }
+  CHECK(node.panel().phase() == alarm::Phase::kArmed);
+  now += 9 * 60 * 1000; node.tick(now);
+  CHECK(!node.zones()[0].silent && node.panel().phase() == alarm::Phase::kArmed);          // not yet
+  now += 2 * 60 * 1000; node.tick(now);
+  CHECK(node.zones()[0].silent && node.zones()[0].state == alarm::ZoneState::kTamper);      // lost: while armed it is a tamper
+  CHECK(node.panel().phase() == alarm::Phase::kAlarm);
+  // hearing it again clears the silence
+  node.feed_zigbee("front-door", alarm::ZoneState::kNormal, false, now);
+  CHECK(!node.zones()[0].silent && node.zones()[0].state == alarm::ZoneState::kNormal);
+  // while the radio is not ours nothing is judged, and the allowance starts again when it becomes ours
+  alarm::Runner other(s);
+  other.feed_zigbee("front-door", alarm::ZoneState::kNormal, false, 0);
+  other.radio_held(false, 0);
+  other.tick(100 * 60 * 1000);
+  CHECK(!other.zones()[0].silent);
+  other.radio_held(false, 100 * 60 * 1000); other.radio_held(true, 100 * 60 * 1000);
+  other.tick(100 * 60 * 1000 + 5 * 60 * 1000);
+  CHECK(!other.zones()[0].silent);
+  other.tick(100 * 60 * 1000 + 11 * 60 * 1000);
+  CHECK(other.zones()[0].silent);
+}
+
 int main() {
   test_frames();
   test_clusters();
@@ -325,6 +358,7 @@ int main() {
   test_owner();
   test_settings();
   test_runner();
+  test_silent_sensor();
   std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

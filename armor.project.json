@@ -2,7 +2,7 @@
   "schema_version": "1.0",
   "ecosystem": "A.R.M.O.R.",
   "name": "ARMOR-ALARM",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "role": "Alarm node and panel: the zones, the arming, the delays, the siren and the PIN of the house's alarm, with the server or without it",
   "stack": "C++17 host-tested core; ESP-IDF 5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards)",
   "technologies": [
@@ -17,5 +17,5 @@
   "parent": "ARMOR-COMMON",
   "build": "cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host",
   "notes": "The core (zones, the end-of-line loop with a debouncer, the panel: away and stay arming, exit and entry delays, a latching alarm, a siren that times out, forced bypass, PIN with lockout, a log of events) and, on it, the node firmware: the settings, eight wired zones, the siren on a relay, the web panel in seven languages, the update from GitHub, the Zigbee radio bridge and relays of the base board, and the messages armor/alarm/<node>/state|command|result (the server may arm and disarm only through three independent switches). 492,368 checks on a computer plus the panel in a real browser against a stand-in node; the firmware builds for both boards. Nothing has run on a board or on a real installation, no zone or siren has been wired, the node's own Zigbee conversation with a coordinator (taking the radio over from the server) is written and tested against a stand-in, but nothing has talked to a real coordinator or sensor, and this is not a certified alarm system.",
-  "native_version": "0.2.5"
+  "native_version": "0.2.6"
 }

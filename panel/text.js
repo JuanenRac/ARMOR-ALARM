@@ -603,6 +603,7 @@ const L = {
   panelTimes: ["Delays", "Retardos", "Verzögerungen", "Temporisations", "Ritardi", "遅延", "延时"],
   panelExit: ["Exit delay (s)", "Retardo de salida (s)", "Ausgangsverzögerung (s)", "Temporisation de sortie (s)", "Ritardo di uscita (s)", "退出遅延（秒）", "退出延时（秒）"],
   panelEntry: ["Entry delay (s)", "Retardo de entrada (s)", "Eingangsverzögerung (s)", "Temporisation d'entrée (s)", "Ritardo d'ingresso (s)", "進入遅延（秒）", "进入延时（秒）"],
+  panelZigbeeSilence: ["A Zigbee sensor silent for this long (min) counts as lost, 0 = off", "Un sensor Zigbee callado durante (min) se da por perdido, 0 = no", "Ein Zigbee-Sensor, der so lange (Min.) schweigt, gilt als verloren, 0 = aus", "Un capteur Zigbee muet pendant (min) est considéré perdu, 0 = désactivé", "Un sensore Zigbee muto per (min) è considerato perso, 0 = disattivato", "Zigbee センサーがこの時間（分）無通信だと紛失扱い、0 = 無効", "Zigbee 传感器沉默超过此时间（分钟）视为丢失，0 = 关闭"],
   panelSiren: ["The siren stops by itself after (s)", "La sirena se para sola tras (s)", "Die Sirene hört von selbst auf nach (s)", "La sirène s'arrête seule après (s)", "La sirena si ferma da sola dopo (s)", "サイレンが自動停止するまで（秒）", "警笛自动停止时间（秒）"],
   panelLockAfter: ["Lock after this many wrong PINs", "Bloquear tras tantos PIN erróneos", "Sperren nach so vielen falschen PINs", "Verrouiller après autant de PIN erronés", "Blocca dopo tanti PIN errati", "誤った PIN の回数でロック", "错误 PIN 达到此次数后锁定"],
   panelLockFor: ["Locked for (s)", "Bloqueada durante (s)", "Gesperrt für (s)", "Verrouillée pendant (s)", "Bloccata per (s)", "ロック時間（秒）", "锁定时长（秒）"],
