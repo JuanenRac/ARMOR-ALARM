@@ -2,7 +2,7 @@
 
 The firmware of an **ESP32-S3** node on the electrical node's base board ([BASE_BOARD.md](BASE_BOARD.md), [HARDWARE.md](HARDWARE.md)): the Waveshare ESP32-S3-ETH on its PoE cable (`s3-eth`) or an ESP32-S3-WROOM-1 N16R8 on Wi-Fi (`s3-wifi`). It reads **up to eight wired zones** (a loop with an end-of-line resistor on an analog pin), runs the **alarm panel** (core/alarm_panel.hpp), drives the **siren** through a relay of the base board, tells the server what it sees (`armor/alarm/<node>/state`, [ALARM_MESSAGES.md](ALARM_MESSAGES.md)) and lends a **Zigbee radio** to Zigbee2MQTT ([ZIGBEE.md](ZIGBEE.md)).
 
-It has the web panel of every other node (set-up, login, users, Wi-Fi, broker, update over the air with rollback and from GitHub, log, HTTPS, Bluetooth set-up) - the files they share come from ARMOR-COMMON's firmware base - and its own pages: **Panel** (the state of the alarm, arm, disarm with the PIN, the zones and the last events), **Zones** (the loops and their limits), **Delays and PIN**, **Zigbee radio** and **Relays and siren**, in the seven languages.
+It has the web panel of every other node (set-up, login, users, Wi-Fi, broker, update over the air with rollback and from GitHub, log, HTTPS, Bluetooth set-up) - the files they share come from ARMOR-COMMON's firmware base - and its own pages: **Panel** (the state of the alarm, arm, disarm with the PIN, the zones and the last events), **Zones** (the loops and their limits), **Delays and PIN**, **Zigbee radio** and **Relays and siren**, in the eight languages.
 
 ## What is where
 
