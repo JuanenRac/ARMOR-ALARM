@@ -317,6 +317,41 @@ static void test_runner() {
   CHECK(node.zones()[1].state == alarm::ZoneState::kNormal);
 }
 
+static void test_server_feed() {
+  config::Settings s = valid_settings();
+  s.zigbee.enabled = true;
+  s.zones[0].enabled = true; s.zones[0].id = "front-door"; s.zones[0].kind = alarm::ZoneKind::kInstant; s.zones[0].zigbee = "00158d0001a2b3c4"; s.zones[0].pin = -1;
+  s.zones[1].enabled = true; s.zones[1].id = "window"; s.zones[1].kind = alarm::ZoneKind::kInstant;
+  s.panel.pin = "1234"; s.panel.timing.exit_delay_s = 1; s.panel.timing.entry_delay_s = 5; s.panel.timing.siren_max_s = 60;
+  // the message is strict
+  alarm::ZoneFeed feed;
+  CHECK(alarm::parse_zone_feed("{\"zone\":\"front-door\",\"state\":\"triggered\",\"battery_low\":true}", feed) && feed.zone_id == "front-door" && feed.state == alarm::ZoneState::kTriggered && feed.battery_low);
+  CHECK(alarm::parse_zone_feed("{\"zone\":\"a\",\"state\":\"tamper\"}", feed) && feed.state == alarm::ZoneState::kTamper && !feed.battery_low);
+  CHECK(!alarm::parse_zone_feed("{\"zone\":\"a\",\"state\":\"open\"}", feed));                         // not one of the three words
+  CHECK(!alarm::parse_zone_feed("{\"zone\":\"a\",\"state\":\"normal\",\"extra\":1}", feed));              // an unknown field
+  CHECK(!alarm::parse_zone_feed("{\"state\":\"normal\"}", feed) && !alarm::parse_zone_feed("[]", feed) && !alarm::parse_zone_feed("nope", feed));
+  // while the server holds the radio (the node does not), the zone follows what the server says and arming the panel protects it
+  alarm::Runner node(s);
+  std::uint64_t now = 0;
+  node.tick(now);
+  CHECK(node.handle_zone_feed("{\"zone\":\"front-door\",\"state\":\"normal\",\"battery_low\":false}", now) && node.zones()[0].has_reading);
+  for (int i = 0; i < 20; ++i) { node.feed(1, 800, now); now += 100; node.tick(now); }
+  CHECK(node.arm(alarm::Mode::kAway, false, now) == alarm::Refusal::kNone);
+  for (int i = 0; i < 30; ++i) { node.feed(1, 800, now); now += 100; node.tick(now); }
+  CHECK(node.panel().phase() == alarm::Phase::kArmed);
+  CHECK(node.handle_zone_feed("{\"zone\":\"front-door\",\"state\":\"triggered\",\"battery_low\":true}", now));
+  CHECK(node.zones()[0].state == alarm::ZoneState::kTriggered && node.zones()[0].battery_low);
+  now += 100; node.tick(now);
+  CHECK(node.panel().phase() == alarm::Phase::kAlarm);                                                 // an instant Zigbee zone opened with the system armed: the panel alarms by itself
+  // a wired zone, an unknown one or a bad message changes nothing
+  CHECK(!node.handle_zone_feed("{\"zone\":\"window\",\"state\":\"triggered\"}", now) && node.zones()[1].state == alarm::ZoneState::kNormal);
+  CHECK(!node.handle_zone_feed("{\"zone\":\"nothing\",\"state\":\"triggered\"}", now) && !node.handle_zone_feed("garbage", now));
+  // when this node holds the radio it hears the sensors itself: the server's word is not taken
+  alarm::Runner held(s);
+  held.radio_held(true, 0);
+  CHECK(!held.handle_zone_feed("{\"zone\":\"front-door\",\"state\":\"triggered\"}", 0) && !held.zones()[0].has_reading);
+}
+
 static void test_silent_sensor() {
   config::Settings s = valid_settings();
   s.zigbee.enabled = true;
@@ -358,6 +393,7 @@ int main() {
   test_owner();
   test_settings();
   test_runner();
+  test_server_feed();
   test_silent_sensor();
   std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

@@ -117,6 +117,34 @@ inline bool parse_command(const std::string& text, const std::string& node_id, C
   return true;
 }
 
+// What the server says about a Zigbee zone while it holds the radio: {"zone": "<id>", "state": "normal" | "triggered" | "tamper", "battery_low": false}. Strict, like a command: false for
+// anything else. Information only: it cannot arm, disarm or sound anything, it only says how a zone is.
+struct ZoneFeed {
+  std::string zone_id;
+  ZoneState state = ZoneState::kNormal;
+  bool battery_low = false;
+};
+
+inline bool parse_zone_feed(const std::string& text, ZoneFeed& out) {
+  json::Value document;
+  if (!json::parse(text, document) || !document.is_object()) return false;
+  for (const std::string& name : document.names) if (name != "zone" && name != "state" && name != "battery_low") return false;
+  const json::Value* zone = document.get("zone");
+  const json::Value* state = document.get("state");
+  const json::Value* low = document.get("battery_low");
+  if (zone == nullptr || !zone->is_string() || zone->text.empty() || zone->text.size() > 32) return false;
+  if (state == nullptr || !state->is_string() || (low != nullptr && !low->is_bool())) return false;
+  ZoneFeed feed;
+  feed.zone_id = zone->text;
+  if (state->text == "normal") feed.state = ZoneState::kNormal;
+  else if (state->text == "triggered") feed.state = ZoneState::kTriggered;
+  else if (state->text == "tamper") feed.state = ZoneState::kTamper;
+  else return false;
+  feed.battery_low = low != nullptr && low->boolean;
+  out = feed;
+  return true;
+}
+
 inline std::string result_json(const std::string& node_id, std::uint64_t timestamp_ms, const Command& command, Refusal refusal, Phase phase) {
   json::Writer w;
   w.begin_object().field("kind", "alarm_result").field("node_id", node_id).key("timestamp_ms").integer(static_cast<long long>(timestamp_ms));

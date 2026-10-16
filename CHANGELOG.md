@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [0.2.8] - Zigbee zones told by the server and a PIN for Bluetooth pairing
+
+- The Zigbee guide lists the radio modules that work with the bridge and names the RF-star RF-BM-2652P4 (TI CC2652P7: twice the memory, Zigbee 3.0, Thread, Matter and Bluetooth 5.3) as the module for the first boards, with its supply, reset, JTAG, antenna and footprint notes; the older CC2652P modules stay supported as before.
+- Bluetooth pairing now asks for a 6-digit PIN that the node prints on its USB console next to the setup code; the link is authenticated and nothing is accepted over Bluetooth without it (until now any phone in range could pair without a PIN).
+- The Bluetooth note of the panel explains the PIN in all eight languages.
+- While the server holds the Zigbee radio, the panel now takes the state of its Zigbee zones from the server (armor/alarm/<node>/zigbee), so arming the panel guards those doors, windows and motion sensors instead of leaving them at their last state; when the node holds the radio itself it hears the sensors directly and ignores the server.
+- The message is strict (zone, state normal, triggered or tamper, battery_low), is information only and cannot arm, disarm or sound anything; a message for a wired or unknown zone changes nothing.
+- The broker note of the panel named the wrong identity and topics (it was copied from the electrical node): it now says alarm-node and armor/alarm/<node>/state and /result, in all eight languages.
+
 ## [0.2.7] - Portuguese in the panel and a warning for the access point and the station at once
 
 - The panel speaks Portuguese, the eighth language, in every page, hint and message of the settings.

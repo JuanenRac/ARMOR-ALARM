@@ -116,6 +116,20 @@ class Runner {
   Refusal arm(Mode mode, bool force, std::uint64_t now_ms) { return panel_.arm(mode, force, now_ms); }
   Refusal disarm(const std::string& pin, std::uint64_t now_ms) { return panel_.disarm(pin, now_ms); }
 
+  // The state of a Zigbee zone as the server tells it. It counts only while the server holds the radio: when this node holds it, the node hears the sensors itself and what the server says
+  // would be older than what it hears. A message that is not the contract's, or for a zone that is not a Zigbee one, changes nothing. True when it was taken.
+  bool handle_zone_feed(const std::string& text, std::uint64_t now_ms) {
+    ZoneFeed feed;
+    if (radio_ || !parse_zone_feed(text, feed)) return false;
+    for (const ZoneView& view : views_) {
+      if (view.enabled && view.zigbee && view.id == feed.zone_id) {
+        feed_zigbee(feed.zone_id, feed.state, feed.battery_low, now_ms);
+        return true;
+      }
+    }
+    return false;
+  }
+
   // From the server, as a message. A command that is not the contract's is not understood and gets no answer.
   Reply handle(const std::string& text, std::uint64_t now_ms) {
     Reply reply;

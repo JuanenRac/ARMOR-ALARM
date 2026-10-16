@@ -31,3 +31,16 @@ One message per node, every five seconds and at every change (the phase, the mod
 - The answer's `refusal` is `none` exactly when it accepted: `not_disarmed` (already armed or counting down), `zones_open` (a zone that matters is open and `force` was not given; a sounding smoke detector or panic button can never be forced), `not_armed`, `bad_pin` and `locked_out` (the last two never come to a command from the server).
 - The node reads its command topic only when **both** its setting `server.commands` and the broker's access list allow it (`mqtt_identity.sh alarm-commands <node> on` in ARMOR-DEVOPS), and the server sends a command only when it has been turned on there too: three independent switches, all off by default.
 - An accepted command is not an alarm that sounded: the state message says what the panel is doing.
+
+## The Zigbee zones, told by the server
+
+`armor/alarm/{node_id}/zigbee`: JSON, never retained, from the server to the panel, only while the server holds the Zigbee radio (Zigbee2MQTT). The panel does not hear the sensors then, so without this its Zigbee zones would stay at their last state and arming the panel would protect nothing.
+
+```json
+{"zone":"front-door","state":"triggered","battery_low":false}
+```
+
+- `state` is `normal`, `triggered` or `tamper`; `battery_low` may be left out. Nothing else is accepted.
+- The server sends it every time the linked device changes and every 30 seconds meanwhile (Studio, Alarm Designer, links of Zigbee devices to zones), so a restarted panel or a lost message heals by itself.
+- The panel takes it only while it does not hold the radio. When the node holds the radio it hears the sensors itself, and what the server said would be older.
+- It is information, never a command: it cannot arm, disarm or sound anything. The panel decides with its own settings (the kind of zone, the delays, whether it is armed). The broker lets the node read this one topic and nothing else without an explicit `alarm-commands ... on`.

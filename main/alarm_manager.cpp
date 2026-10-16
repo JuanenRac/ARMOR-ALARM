@@ -159,6 +159,12 @@ void on_command(const std::string&, const std::string& payload) {
   publish_state_locked(true);
 }
 
+// The server tells the panel how its Zigbee zones are while it holds the radio (information, never a command: it is read even when the server may not arm the panel).
+void on_zone_feed(const std::string&, const std::string& payload) {
+  std::lock_guard<std::mutex> guard(g_lock);
+  if (g_runner) g_runner->handle_zone_feed(payload, now_ms());
+}
+
 void alarm_task(void*) {
   adc_oneshot_unit_handle_t unit = nullptr;
   adc_oneshot_unit_init_cfg_t unit_config{};
@@ -277,6 +283,7 @@ void start(const config::Settings& settings, Publish publish) {
     zigbee_bridge::set_local_host(g_host.get(), static_cast<unsigned>(settings.zigbee_local.after_s));
     ESP_LOGI(kTag, "the node takes the Zigbee radio itself after %d s without the server's client", settings.zigbee_local.after_s);
   }
+  mqtt_link::subscribe(alarm::topic(settings.node_id, "zigbee"), on_zone_feed);
   if (settings.server.commands) {
     mqtt_link::subscribe(alarm::topic(settings.node_id, "command"), on_command);
     ESP_LOGI(kTag, "the server may arm and disarm the panel (armor/alarm/%s/command)", settings.node_id.c_str());
