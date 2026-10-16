@@ -55,6 +55,15 @@
 * **署名付きの無線アップデート：**ノードが GitHub からインストールするのは、SHA-256 が一致し、管理者の有効な Ed25519 署名を持つイメージだけです（公開鍵はファームウェア内、秘密鍵は管理者の手元から出ません）。管理者がパネルで手動アップロードしたファイルは引き続き受け付けます。パネルのページとメッセージは 8 言語です。
 * **PIN 付きの Bluetooth ペアリング：**6 桁の PIN は設定コードから導出され、USB コンソールに表示され、管理者にはパネルにも表示されます。スマートフォンはこれを入力して初めてノードの設定を書き込めます。
 
+## 🖼️ スクリーンショット
+
+テストベンチで 1920×1080 で撮影。サンプルデータを使用しており、実際の設備は接続されていません。
+
+<table>
+<tr><td width="50%" valign="top"><img src="images/screenshots/overview.png" alt="概要：ネットワーク、ブローカー、ファームウェア、報告内容など、ノードの状態をひと目で確認できます。" width="100%"><br><sub>概要：ネットワーク、ブローカー、ファームウェア、報告内容など、ノードの状態をひと目で確認できます。</sub></td><td width="50%" valign="top"><img src="images/screenshots/zones.png" alt="ゾーン：パネルの各有線・Zigbee ゾーンの種類、保持時間、リアルタイムの状態。" width="100%"><br><sub>ゾーン：パネルの各有線・Zigbee ゾーンの種類、保持時間、リアルタイムの状態。</sub></td></tr>
+<tr><td width="50%" valign="top"><img src="images/screenshots/zigbee.png" alt="Zigbee 無線：コーディネーターモジュールへのシリアルブリッジ、使用を許可するクライアント、ブリッジの状態。" width="100%"><br><sub>Zigbee 無線：コーディネーターモジュールへのシリアルブリッジ、使用を許可するクライアント、ブリッジの状態。</sub></td><td width="50%" valign="top"><img src="images/screenshots/inputs-outputs.png" alt="リレーとサイレン：ベースボードの出力と、それぞれを動かすもの。" width="100%"><br><sub>リレーとサイレン：ベースボードの出力と、それぞれを動かすもの。</sub></td></tr>
+</table>
+
 ## 🧩 A.R.M.O.R. での役割
 
 ARMOR-ALARM は警報盤です。警戒区域、警戒、遅延、サイレン、PIN はノード自身で判断されるため、サーバーがいなくても家は守られます。[ARMOR-SERVER](https://github.com/JuanenRac/ARMOR-SERVER) がこれを表示し、Zigbee センサーをゾーンに結び付け、許可すれば警戒・解除も行います。[ARMOR-STUDIO](https://github.com/JuanenRac/ARMOR-STUDIO) の*警報盤*メニューと*警報デザイナー*、[ARMOR-ANDROID-CONTROL](https://github.com/JuanenRac/ARMOR-ANDROID-CONTROL) アプリが操作します。Zigbee 無線は基板上でも、ネットワーク上のコーディネーターでも構いません。

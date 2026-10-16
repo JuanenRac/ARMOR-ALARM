@@ -602,7 +602,7 @@ function zoneCard(index) {
   return el("section", { class: "card" }, el("h2", {}, t("zoneN", index + 1), cfg.enabled ? " · " + (cfg.name || cfg.id) : ""),
     field("zoneEnabled", base + "enabled", { type: "checkbox", rerender: true }),
     cfg.enabled ? [
-      el("div", { class: "row" }, field("zoneId", base + "id", { max: 32, hint: t("meterChannelHint") }), field("zoneName", base + "name", { max: 40 })),
+      el("div", { class: "row" }, field("zoneId", base + "id", { max: 32, hint: t("zoneIdHint") }), field("zoneName", base + "name", { max: 40 })),
       field("zoneZigbee", base + "zigbee", { max: 16, placeholder: "00158d0001a2b3c4", hint: t("zoneZigbeeHint") }),
       cfg.zigbee ? null : field("zoneInput", base + "input", { type: "select", rerender: true, options: [["loop", t("zoneInputLoop")], ["digital", t("zoneInputDigital")]], hint: t("zoneInputHint") }),
       el("div", { class: "row" }, cfg.zigbee ? null : field("zonePin", base + "pin", { type: "select", number: true, options: cfg.input === "digital" ? pinOptions(cfg.pin, true, base + "pin") : zonePinOptions(cfg.pin, base + "pin") }),
@@ -620,7 +620,7 @@ function buttonsCard() {
   return el("section", { class: "card" }, el("h2", {}, t("buttonsTitle")), el("p", { class: "muted" }, t("buttonsHelp")),
     (S.cfg.buttons || []).map((b, i) => {
       const base = "buttons." + i + ".";
-      return el("div", { class: "row" }, field("buttonEnabled", base + "enabled", { type: "checkbox", rerender: true }),
+      return el("div", { class: "row" }, el("strong", { class: "muted" }, "#" + (i + 1)), field("buttonEnabled", base + "enabled", { type: "checkbox", rerender: true }),
         b.enabled ? [field("buttonAction", base + "action", { type: "select", options: BUTTON_ACTIONS.map(a => [a, t("ba_" + a)]) }), field("buttonPin", base + "pin", { type: "select", number: true, options: pinOptions(b.pin, true, base + "pin") })] : null);
     }));
 }
