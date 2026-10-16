@@ -134,7 +134,7 @@ extern "C" void app_main() {
   armor::improv_serial::start();   // Improv Wi-Fi over the USB cable (ESP Web Tools)
   const bool panel_ok = network_ok && armor::web::start(settings);
   armor::mqtt_link::start(settings);
-  if (!setup) armor::zigbee_bridge::start(settings);   // the radio's serial line, lent to one client once the network is up
+  if (!setup) { armor::zigbee_bridge::start(settings); armor::zigbee_bridge::start_network(settings); }   // the radio's serial line, lent to one client once the network is up
   armor::ble_provision::start(settings, setup);   // only when the settings say so: Bluetooth stays unused otherwise
 
   // A periodic, unconditional restart the panel can turn on (0: never) - a board left running for weeks without anyone touching it.

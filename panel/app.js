@@ -196,6 +196,14 @@ async function loadConfig() {
   S.cfg = r.data.config; S.saved = JSON.stringify(S.cfg); S.channelAuto = r.data.channel_auto; S.firmware = r.data.firmware;
 }
 
+// The PIN of Bluetooth pairing is asked of the node only when an administrator wants to read it, and is forgotten when it is hidden.
+async function toggleBlePin() {
+  if (S.blePin !== undefined && S.blePin !== null) { S.blePin = null; render(false); return; }
+  const r = await api("GET", "ble-pin");
+  S.blePin = r.ok && r.data ? (r.data.pin || "") : null;
+  render(false);
+}
+
 async function reboot() {
   await api("POST", "reboot", {});
   S.rebooting = true; render();
@@ -316,7 +324,9 @@ function networkPage() {
       cfg.time.ntp_enabled ? field("ntp", "time.ntp") : el("div", { class: "actions" }, el("button", { class: "b", tip: "setTimeFromBrowser", disabled: !isAdmin(), onclick: setClockFromBrowser }, t("setTimeFromBrowser"))),
       S.status && S.status.time ? el("p", { class: "muted" }, t("localTime") + ": " + (S.status.time.set ? S.status.time.local : t("clockNotSet"))) : null,
       note(t("clockNote"), "info")),
-    card(t("bleTitle"), field("bleMode", "ble.mode", { type: "select", options: [["setup", t("bleSetup")], ["always", t("bleAlways")], ["off", t("bleOff")]] }), note(t("bleNote"), "info")),
+    card(t("bleTitle"), field("bleMode", "ble.mode", { type: "select", options: [["setup", t("bleSetup")], ["always", t("bleAlways")], ["off", t("bleOff")]] }), note(t("bleNote"), "info"),
+      isAdmin() ? el("div", { class: "actions" }, el("button", { class: "b", onclick: toggleBlePin }, S.blePin === undefined || S.blePin === null ? t("blePinShow") : t("blePinHide"))) : null,
+      isAdmin() && S.blePin !== undefined && S.blePin !== null ? (S.blePin === "" ? note(t("blePinNone"), "info") : el("p", { class: "note info" }, t("blePinIs") + ": ", el("b", { class: "mono" }, S.blePin))) : null),
     card(t("systemTitle"), field("autoRestart", "system.auto_restart_hours", { type: "select", number: true,
       options: [[0, t("autoRestartNever")], [1, t("autoRestart1")], [2, t("autoRestart2")], [3, t("autoRestart3")], [4, t("autoRestart4")], [6, t("autoRestart6")], [12, t("autoRestart12")], [24, t("autoRestart24")], [48, t("autoRestart48")]] }),
       note(t("autoRestartNote"), "info")),
@@ -468,6 +478,9 @@ function zigbeePage() {
   const ip = S.status && S.status.network && S.status.network.ip;
   return el("div", {}, note(t("zbWarn")), el("p", { class: "muted" }, t("zbIntro")), note(t("zbRestart"), "info"),
     el("div", { class: "grid wide" },
+      el("section", { class: "card" }, el("h2", {}, t("zbNetTitle")), el("p", { class: "muted" }, t("zbNetHint")),
+        field("zbNetHost", "zigbee.network_host", { max: 15, placeholder: "192.168.0.201", rerender: true }),
+        cfg.network_host ? field("zbNetPort", "zigbee.network_port", { type: "number", min: 1, max: 65535 }) : null),
       el("section", { class: "card" }, el("h2", {}, t("zbTitle")),
         field("zbEnabled", "zigbee.enabled", { type: "checkbox", rerender: true }),
         cfg.enabled ? [
@@ -476,7 +489,7 @@ function zigbeePage() {
           el("div", { class: "row" }, field("zbBaud", "zigbee.baud", { type: "select", number: true, options: ZIGBEE_BAUDS.map(b => [b, String(b)]) }), field("zbPort", "zigbee.port", { type: "number", min: 1024, max: 65535 })),
           field("zbAllowed", "zigbee.allowed_client", { max: 15, placeholder: "192.168.0.180", hint: t("zbAllowedHint") }),
           el("div", { class: "row" }, field("zbFallback", "zigbee.fallback_client", { max: 15, placeholder: "192.168.0.60", hint: t("zbFallbackHint") }), field("zbFallbackAfter", "zigbee.fallback_after_s", { type: "number", min: 5, max: 600 }))] : null),
-      cfg.enabled ? el("section", { class: "card" }, el("h2", {}, t("zbLocalTitle")), el("p", { class: "muted" }, t("zbLocalHint")),
+      cfg.enabled || cfg.network_host ? el("section", { class: "card" }, el("h2", {}, t("zbLocalTitle")), el("p", { class: "muted" }, t("zbLocalHint")),
         field("zbLocalAfter", "zigbee_local.after_s", { type: "number", min: 0, max: 3600 }),
         el("label", { class: "field" }, el("span", {}, t("zbLocalSirens")), sirensArea())) : null,
       z.enabled ? el("section", { class: "card" }, el("h2", {}, t("zbStatus")),

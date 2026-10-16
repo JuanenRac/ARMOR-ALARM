@@ -8,7 +8,9 @@
 #include "zigbee_bridge.hpp"
 
 #include "core/radio_owner.hpp"
+#include "mqtt_link.hpp"
 
+#include <cerrno>
 #include <cstring>
 #include <atomic>
 #include <memory>
@@ -225,6 +227,87 @@ void bridge_task(void*) {
   }
 }
 }  // namespace
+
+// ---- a coordinator on the network ----------------------------------------------------------------------------------------------------------------------
+
+// A TCP connection to the coordinator, or -1: non-blocking connect that is given a few seconds.
+static int connect_to(std::uint32_t host, int port) {
+  const int sock = socket(AF_INET, SOCK_STREAM, 0);
+  if (sock < 0) return -1;
+  fcntl(sock, F_SETFL, fcntl(sock, F_GETFL, 0) | O_NONBLOCK);
+  sockaddr_in address{};
+  address.sin_family = AF_INET;
+  address.sin_port = htons(static_cast<std::uint16_t>(port));
+  address.sin_addr.s_addr = htonl(host);
+  const int result = connect(sock, reinterpret_cast<sockaddr*>(&address), sizeof address);
+  if (result != 0 && errno != EINPROGRESS) { close(sock); return -1; }
+  if (result != 0) {
+    fd_set writable;
+    FD_ZERO(&writable);
+    FD_SET(sock, &writable);
+    timeval wait{4, 0};
+    int error = 0;
+    socklen_t length = sizeof error;
+    if (select(sock + 1, nullptr, &writable, nullptr, &wait) <= 0 || getsockopt(sock, SOL_SOCKET, SO_ERROR, &error, &length) != 0 || error != 0) { close(sock); return -1; }
+  }
+  const int yes = 1;
+  setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof yes);
+  setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof yes);
+  const timeval send_timeout{1, 0};
+  setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof send_timeout);
+  return sock;
+}
+
+static void network_task(void*) {
+  std::uint32_t host = 0;
+  net::parse_ipv4(g_setting.network_host, host);
+  int sock = -1;
+  std::uint64_t retry_at = 0;
+  std::uint8_t buffer[512];
+  const auto let_go = [&](const char* why) {
+    if (sock >= 0) { close(sock); sock = -1; }
+    if (g_local.exchange(false)) g_host->end();
+    set_state("network");
+    ESP_LOGW(kTag, "the node lets the network coordinator go: %s", why);
+  };
+  for (;;) {
+    const std::uint64_t now = now_ms();
+    // "the client is connected" is, here, the server being reachable: while it is, Zigbee2MQTT is the one that talks to the coordinator
+    const bool mine = g_owner->update(mqtt_link::connected(), now) == zigbee::RadioOwner::Owner::kNode;
+    if (!mine && (sock >= 0 || g_local.load())) let_go("the server is back");
+    if (mine && sock < 0 && now >= retry_at) {
+      sock = connect_to(host, g_setting.network_port);
+      if (sock >= 0) {
+        g_local = true;
+        g_host->begin(now);
+        set_state("local");
+        ESP_LOGW(kTag, "the server has been away for %u s: the node speaks to the network coordinator itself", g_local_after_s);
+      } else {
+        retry_at = now + 5000;
+      }
+    }
+    if (sock >= 0) {
+      g_host->tick(now);
+      std::uint8_t out[256];
+      const std::size_t count = g_host->take_output(out, sizeof out);
+      if (count > 0 && !send_all(sock, out, count)) { let_go("it could not be written to"); retry_at = now + 5000; continue; }
+      const int n = recv(sock, buffer, sizeof buffer, MSG_DONTWAIT);
+      if (n > 0) g_host->feed(buffer, static_cast<std::size_t>(n), now);
+      else if (n == 0 || (n < 0 && errno != EWOULDBLOCK && errno != EAGAIN)) { let_go("it closed the connection"); retry_at = now + 5000; }
+    }
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+}
+
+void start_network(const config::IoSettings& settings) {
+  if (settings.zigbee.network_host.empty() || settings.zigbee.enabled) return;
+  g_setting = settings.zigbee;
+  if (g_host == nullptr || g_local_after_s == 0) { ESP_LOGW(kTag, "a network coordinator is set but the node is never to hold the radio: nothing to do"); return; }
+  g_owner = std::make_unique<zigbee::RadioOwner>(static_cast<std::uint64_t>(g_local_after_s) * 1000ULL, now_ms());
+  set_state("network");
+  ESP_LOGI(kTag, "Zigbee through the network coordinator at %s:%d (the node uses it only while the server is away for %u s)", g_setting.network_host.c_str(), g_setting.network_port, g_local_after_s);
+  xTaskCreate(network_task, "zigbee-net", 6144, nullptr, 5, nullptr);
+}
 
 void start(const config::IoSettings& settings) {
   g_setting = settings.zigbee;

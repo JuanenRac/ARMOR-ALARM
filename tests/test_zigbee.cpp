@@ -317,6 +317,31 @@ static void test_runner() {
   CHECK(node.zones()[1].state == alarm::ZoneState::kNormal);
 }
 
+static void test_network_coordinator_setting() {
+  config::Settings s = valid_settings();
+  s.zones[0].enabled = true; s.zones[0].id = "front-door"; s.zones[0].zigbee = "00158d0001a2b3c4"; s.zones[0].pin = -1;
+  s.panel.pin = "1234";
+  s.zigbee_local.after_s = 60;
+  // a coordinator on the network stands for the radio on the board: the local settings need one of them
+  CHECK(has(config::validate(s), "zigbee_local.after_s", "needs_zigbee"));
+  s.zigbee.network_host = "192.168.0.201";
+  CHECK(config::validate(s).empty());
+  // written and read back, the way the flash keeps it
+  s.zigbee.network_port = 7000;
+  const std::string stored = config::to_json(s, true);
+  config::Settings back;
+  config::Problems problems;
+  CHECK(config::load(stored, config::default_settings("a1b2c3"), back, problems) && back.zigbee.network_host == "192.168.0.201" && back.zigbee.network_port == 7000);
+  // a bad address is refused, and a coordinator next to a radio on the board is a conflict
+  s.zigbee.network_host = "not-an-address";
+  CHECK(has(config::validate(s), "zigbee.network_host", "invalid"));
+  s.zigbee.network_host = "192.168.0.201";
+  s.zigbee.enabled = true; s.zigbee.allowed_client = "192.168.0.180"; s.zigbee.rx = board::kZigbeePins.rx; s.zigbee.tx = board::kZigbeePins.tx;
+  CHECK(has(config::validate(s), "zigbee.network_host", "conflict"));
+  problems.clear();
+  CHECK(!config::load("{\"zigbee\":{\"network_host\":\"192.168.0.201\",\"network_port\":70000}}", s, back, problems) && has(problems, "zigbee.network_port", "range"));
+}
+
 static void test_server_feed() {
   config::Settings s = valid_settings();
   s.zigbee.enabled = true;
@@ -394,6 +419,7 @@ int main() {
   test_settings();
   test_runner();
   test_server_feed();
+  test_network_coordinator_setting();
   test_silent_sensor();
   std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

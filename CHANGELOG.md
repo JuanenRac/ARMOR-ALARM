@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## [0.2.9] - A Zigbee coordinator on the network and the Bluetooth PIN in the panel
+
+- **Signed firmware:** a node installs from GitHub only a firmware whose signature verifies. Each release carries, next to the image and its SHA-256, an Ed25519 signature of that hash (`<image>.sig`); the node downloads the image, hashes it and installs it only when the hash is the published one and the signature verifies with the public key of the releases, which is in the firmware (the private key never leaves the maintainer's computer). A release without a signature, or with a wrong one, is refused and nothing changes.
+- An administrator can still upload a firmware file by hand in the panel, as before: that is the administrator's own act and is the way out if a key ever has to change.
+- The panel tells the two new refusals (no signature, bad signature) in the eight languages.
+- The verification (SHA-512 and Ed25519, with their constants worked out by a script instead of typed) is tested on a computer against signatures made by another implementation, with every kind of damage to the message, the signature and the key.
+- An administrator can read the Bluetooth PIN in the panel (Bluetooth card, *Show the Bluetooth PIN*), without going to the USB console: it is asked of the node only then and forgotten when hidden; new route GET /api/v1/ble-pin, administrators only; the texts are in the eight languages.
+- The panel can use a Zigbee coordinator on the network (SMLIGHT SLZB-06, ZigStar UZG-01...) instead of a radio on the board: new settings `zigbee.network_host` and `zigbee.network_port`, refused together with the radio of the board.
+- With one, the node connects to the coordinator itself only while the server has been away (the time of *Take the radio after*), keeps guarding the Zigbee zones, and lets go of it the moment the server is back so that Zigbee2MQTT can have it; the local Zigbee settings accept either kind of radio.
+- The panel has a card for it in the eight languages, host tests hold the settings (valid address, port range, conflict with the radio of the board, round trip), and the Zigbee guide explains the mode and what is not proven yet.
+
 ## [0.2.8] - Zigbee zones told by the server and a PIN for Bluetooth pairing
 
 - The Zigbee guide lists the radio modules that work with the bridge and names the RF-star RF-BM-2652P4 (TI CC2652P7: twice the memory, Zigbee 3.0, Thread, Matter and Bluetooth 5.3) as the module for the first boards, with its supply, reset, JTAG, antenna and footprint notes; the older CC2652P modules stay supported as before.

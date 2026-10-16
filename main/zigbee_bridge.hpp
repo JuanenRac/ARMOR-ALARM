@@ -15,6 +15,10 @@ void start(const config::IoSettings& settings);
 
 zigbee::Status status();
 
+// A Zigbee coordinator on the network (settings.zigbee.network_host) instead of a radio on the board: the node is its client only while the server is away (no MQTT link for the time of
+// `set_local_host`), speaking Zigbee itself through the same LocalHost, and lets go of it the moment the server is back so that Zigbee2MQTT can have it. Call after set_local_host().
+void start_network(const config::IoSettings& settings);
+
 // The node itself as a Zigbee host, for the moments when the radio is its own (the server's client has been away for `after_s` seconds; 0: never). The bridge's task calls these and no
 // others: `begin` when the node takes the radio, `end` when a client connects again, `feed` with what the radio says, `tick` every turn, `take_output` for what is to be written to it.
 class LocalHost {

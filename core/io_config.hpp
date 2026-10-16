@@ -29,6 +29,8 @@ struct ZigbeeSetting {
   std::string allowed_client;  // the one IPv4 address that may connect (the server that runs Zigbee2MQTT): required while the bridge is on
   std::string fallback_client; // optionally a second address (an alarm panel) that may take the radio over while the first has been away for fallback_after_s; empty: none
   int fallback_after_s = 30;   // how long the first client must have been away before the second may connect
+  std::string network_host;    // the address of a Zigbee coordinator on the network (a PoE/Ethernet one: SMLIGHT SLZB-06, ZigStar UZG-01...) instead of a radio on this board; empty: none
+  int network_port = 6638;     // the TCP port of that coordinator (Z-Stack over a socket: 6638)
 };
 
 // One relay output: the node drives the pin, whatever is behind it (a driver, the relay, the load) is the installer's. Every relay starts open (off) when the node starts.
@@ -83,6 +85,8 @@ inline void io_read(const json::Value& document, IoSettings& io, Problems& probl
     read_text(*zigbee, "allowed_client", s.zigbee.allowed_client, 15, "zigbee.allowed_client", problems);
     read_text(*zigbee, "fallback_client", s.zigbee.fallback_client, 15, "zigbee.fallback_client", problems);
     read_int(*zigbee, "fallback_after_s", s.zigbee.fallback_after_s, 5, 600, "zigbee.fallback_after_s", problems);
+    read_text(*zigbee, "network_host", s.zigbee.network_host, 15, "zigbee.network_host", problems);
+    read_int(*zigbee, "network_port", s.zigbee.network_port, 1, 65535, "zigbee.network_port", problems);
   }
   if (const json::Value* relays = document.get("relays"); relays != nullptr) {
     if (!relays->is_array() || relays->items.size() > board::kRelayCount) bad(problems, "relays", "invalid");
@@ -128,6 +132,12 @@ inline void io_validate(const IoSettings& io, bool broker_enabled, Claim&& claim
       else if (second == client) bad(problems, "zigbee.fallback_client", "conflict");
     }
   }
+  // A coordinator on the network and a radio on this board are two ways to have the same radio: one of them.
+  if (!s.zigbee.network_host.empty()) {
+    std::uint32_t coordinator = 0;
+    if (!net::parse_ipv4(s.zigbee.network_host, coordinator) || !net::usable_host_address(coordinator)) bad(problems, "zigbee.network_host", "invalid");
+    else if (s.zigbee.enabled) bad(problems, "zigbee.network_host", "conflict");
+  }
 
   // the relay outputs: each has its own name and its own pin, which may not be reserved
   std::vector<std::string> relay_names;
@@ -156,7 +166,7 @@ inline void io_validate(const IoSettings& io, bool broker_enabled, Claim&& claim
 inline void io_write(json::Writer& w, const IoSettings& io, bool secrets = false) {
   const IoSettings& s = io;
   w.key("zigbee").begin_object().field("enabled", s.zigbee.enabled).field("rx", s.zigbee.rx).field("tx", s.zigbee.tx).field("reset", s.zigbee.reset).field("bootloader", s.zigbee.bootloader)
-      .field("baud", s.zigbee.baud).field("port", s.zigbee.port).field("allowed_client", s.zigbee.allowed_client).field("fallback_client", s.zigbee.fallback_client).field("fallback_after_s", s.zigbee.fallback_after_s).end_object();
+      .field("baud", s.zigbee.baud).field("port", s.zigbee.port).field("allowed_client", s.zigbee.allowed_client).field("fallback_client", s.zigbee.fallback_client).field("fallback_after_s", s.zigbee.fallback_after_s).field("network_host", s.zigbee.network_host).field("network_port", s.zigbee.network_port).end_object();
   w.key("relays").begin_array();
   for (const RelaySetting& relay : s.relays) {
     w.begin_object().field("enabled", relay.enabled).field("name", relay.name).field("label", relay.label).field("pin", relay.pin).field("active_low", relay.active_low).end_object();

@@ -66,6 +66,15 @@ The node does not care which chip the radio is: it lends a serial line byte for 
 - **Firmware:** Koenkk's *Z-Stack-firmware* repository carries coordinator images for the CC2652P7 LaunchPad family. As with the E72, the RF-switch and the pins of a third-party module may not be those of the LaunchPad image, so check an image against this module before trusting it. Nothing has been flashed with this project's boards yet.
 - **Thread and Matter:** the same module can run other firmware (a Thread radio co-processor for an OpenThread border router, or a multiprotocol image). Because the bridge only carries bytes, a Thread border router on the server would use the same serial line; that is an addition for later, not something this version does.
 
+## A coordinator on the network instead of a radio on the board
+
+A PoE or Ethernet Zigbee coordinator (SMLIGHT SLZB-06 with a CC2652P7 or a CC2674P10, ZigStar UZG-01...) can stand for the radio of the base board. Give the node its address (*Zigbee coordinator on the network* in the panel, `zigbee.network_host`, and `zigbee.network_port`, 6638 by default) and leave the radio of the board off: the two are one choice, and the settings refuse both at once.
+
+- **While the server is there**, Zigbee2MQTT on the server talks to the coordinator directly (`port: tcp://<coordinator address>:6638`, `adapter: zstack`), and the node does not touch it. The node still learns the state of its Zigbee zones from the server (see ALARM_MESSAGES.md).
+- **When the server has been away** for the time of *Take the radio after* (the MQTT link is the sign of the server), the node connects to the coordinator itself and speaks Zigbee through the same local host that it uses on its own radio, so the Zigbee zones are still guarded. The moment the server is back the node closes the connection, because a coordinator serves one client at a time and Zigbee2MQTT needs it.
+- **What is not known yet:** how a given coordinator behaves when two clients try it (the node only tries while the server is away), and nothing of this has run on a board with a real coordinator. Try it with the server stopped before trusting it.
+- The firmware of such a coordinator is the maker's (a Z-Stack coordinator image that Zigbee2MQTT knows); this project does not flash it.
+
 ## Giving the radio its firmware
 
 1. Wire the module to the node as in [BASE_BOARD.md](BASE_BOARD.md), turn the bridge on and set `allowed_client` to the address of the computer that will flash (temporarily).

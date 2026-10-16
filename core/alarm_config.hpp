@@ -243,7 +243,9 @@ inline Problems validate(const Settings& s) {
     if (!found) bad(problems, "panel.siren_relay", "unknown_relay");
   }
   if (s.server.commands && !s.mqtt.enabled) bad(problems, "server.commands", "needs_broker");
-  if (s.zigbee_local.after_s != 0 && (s.zigbee_local.after_s < 10 || !s.zigbee.enabled)) bad(problems, "zigbee_local.after_s", s.zigbee.enabled ? "range" : "needs_zigbee");
+  // the radio the node may take over is the one on its board or a coordinator on the network
+  const bool has_radio = s.zigbee.enabled || !s.zigbee.network_host.empty();
+  if (s.zigbee_local.after_s != 0 && (s.zigbee_local.after_s < 10 || !has_radio)) bad(problems, "zigbee_local.after_s", has_radio ? "range" : "needs_zigbee");
   for (std::size_t i = 0; i < s.zigbee_local.sirens.size(); ++i) {
     std::uint64_t ieee = 0;
     if (!s.zigbee_local.sirens[i].empty() && !zigbee::parse_ieee(s.zigbee_local.sirens[i], ieee)) bad(problems, "zigbee_local.sirens." + std::to_string(i), "invalid");
