@@ -119,6 +119,12 @@ static void test_document() {
   problems.clear();
   CHECK(config::load("{\"panel\":{\"exit_delay_s\":20}}", s, edited, problems) && edited.panel.pin == "1234" && edited.panel.timing.exit_delay_s == 20);
   problems.clear();
+  CHECK(config::load("{\"web\":{\"admin_sources\":\"192.168.1.0/24, 10.66.0.0/24\"}}", s, edited, problems) && edited.admin_sources == "192.168.1.0/24, 10.66.0.0/24");
+  problems.clear();
+  CHECK(!config::load("{\"web\":{\"admin_sources\":\"not a network\"}}", s, edited, problems) && has(problems, "web.admin_sources", "invalid"));
+  problems.clear();
+  CHECK(config::load("{}", s, edited, problems) && edited.admin_sources.empty());
+  problems.clear();
   CHECK(config::load("{\"panel\":{\"pin\":\"987654\"}}", s, edited, problems) && edited.panel.pin == "987654");
   problems.clear();
   CHECK(!config::load("{\"panel\":{\"pin_clear\":true}}", s, edited, problems) && has(problems, "panel.pin", "required"));   // with zones to guard it may not be left empty

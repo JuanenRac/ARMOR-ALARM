@@ -22,13 +22,13 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-477%2C588-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.3.1-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.3.2-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
 ---
 
-**正直さのチェック - 今日動いているもの:** 存在するのは**警報のコア**（警戒区域とは何か、ADC が読む配線ループがどう状態になるか、警報盤のルール：警戒、遅延、警報、サイレン、ロックアウト付き PIN）と、その上に作られた**ノードのファームウェア**（設定、Web パネル、サーバーとのメッセージ、Zigbee 無線のブリッジ、ネットワーク上の Zigbee コーディネーター、リレー、Bluetooth、署名付きアップデート）で、両方の基板向けにビルドできます。コア、設定、メッセージ、実際のブラウザーでの代替ノードに対するパネルは、6 つのテストプログラムで 477,588 項目としてコンピューター上でテストされています。**基板上でも実際の設備でも何も動いたことはなく、警戒区域の配線もサイレンの接続もなく、ノード自身の Zigbee コーディネーター（ローカルまたはネットワーク上）との通信は書かれて代替コーディネーターに対してテストされていますが、実際のコーディネーターやセンサーに対して動いたことはなく、これは認証済みの警報システムではありません。**
+**正直さのチェック - 今日動いているもの:** 存在するのは**警報のコア**（警戒区域とは何か、ADC が読む配線ループがどう状態になるか、警報盤のルール：警戒、遅延、警報、サイレン、ロックアウト付き PIN）と、その上に作られた**ノードのファームウェア**（設定、Web パネル、サーバーとのメッセージ、Zigbee 無線のブリッジ、ネットワーク上の Zigbee コーディネーター、リレー、Bluetooth、署名付きアップデート）で、両方の基板向けにビルドできます。コア、設定、メッセージ、実際のブラウザーでの代替ノードに対するパネルは、6 つのテストプログラムで 477,665 項目としてコンピューター上でテストされています。**基板上でも実際の設備でも何も動いたことはなく、警戒区域の配線もサイレンの接続もなく、ノード自身の Zigbee コーディネーター（ローカルまたはネットワーク上）との通信は書かれて代替コーディネーターに対してテストされていますが、実際のコーディネーターやセンサーに対して動いたことはなく、これは認証済みの警報システムではありません。**
 
 ---
 
@@ -36,9 +36,9 @@
 
 | | |
 |---|---|
-| バージョン | `0.3.1` |
+| バージョン | `0.3.2` |
 | 成熟度 | 機能する |
-| テスト | 477,588 checks in 6 programs (`ctest`) |
+| テスト | 477,665 checks in 6 programs (`ctest`) |
 | 技術 | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | 実機での確認 | まだありません：基板、警戒区域、サイレン、Zigbee コーディネーターはいずれも未接続（コンピューター上のテスト、ビルド、ブラウザーでのパネルのみ） |
 
@@ -55,6 +55,7 @@
 * **署名付きの無線アップデート：**ノードが GitHub からインストールするのは、SHA-256 が一致し、管理者の有効な Ed25519 署名を持つイメージだけです（公開鍵はファームウェア内、秘密鍵は管理者の手元から出ません）。管理者がパネルで手動アップロードしたファイルは引き続き受け付けます。パネルのページとメッセージは 8 言語です。
 * **PIN 付きの Bluetooth ペアリング：**6 桁の PIN は設定コードから導出され、USB コンソールに表示され、管理者にはパネルにも表示されます。スマートフォンはこれを入力して初めてノードの設定を書き込めます。
 * **サイレンと再起動：**サイレンのリレーは警報だけのものです（ブローカー、センター、パネルは動かせず、ブローカーを失っても開きません）。まだ鳴っていないゾーンは、サイレンがタイムアウトした後に再び鳴らします。再起動後は、解除状態の煙・パニック警報、消音された警報、ロックアウトが復元されます。警戒中は手動リセットを拒否します。一度も応答しない Zigbee センサーは失われたものとして扱います。
+* **パネルを使えるのは家だけ：**パネルは既定でプライベートネットワーク（または所有者が指定した VPN などのネットワーク）にだけ応答し、保存する本人を締め出す一覧は拒否します。誤ったパスワードは人ごと・アドレスごとに数え、サーバーのプロキシの背後でも動くので、ノードを公開せずに家の外から使えます。
 
 ## 🖼️ スクリーンショット
 
@@ -87,7 +88,7 @@ ARMOR-ALARM/
 **必要なもの:** a C++17 compiler for the host tests, the ESP-IDF 5.4 container to build the image, an ESP32-S3 board (PoE Ethernet or Wi-Fi)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 477,588 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 477,665 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 [設計](docs/DESIGN.md)、[警報盤がサーバーから引き継ぐ方法](docs/FAILOVER.md)、[安全に関する注意](docs/SAFETY.md)を参照してください。
