@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.1] - A siren that cannot be silenced, an alarm that survives a restart and sensors that cannot go quiet unseen
+
+- **The siren's relay belongs to the alarm.** The panel's page, the broker's device commands and the central's token can no longer move it (they are told it is the siren's), it does not fall back to open when the broker is lost, and its pin is written again on every turn of the loop, so a pin that was disturbed is put back while the alarm sounds.
+- **A second alarm is heard.** When the siren has timed out, or a zone that has not sounded yet goes off during an alarm, the siren sounds again (at most three times per alarm) and the event is noted; before, everything after the first alarm was ignored.
+- **A restart keeps the whole alarm:** an alarm of smoke, gas or panic with the system disarmed comes back as that alarm; one whose siren had timed out comes back without the siren, and a lockout after wrong PINs comes back for as long as it lasts.
+- **A reset by hand cannot wipe a guarding alarm:** the BOOT button at power-up and the factory reset of the panel are refused while the alarm is armed or ringing; a factory reset erases the saved state of the alarm and the saved events with the rest, and a button of the alarm on GPIO 0 no longer arms the reset.
+- **Zigbee sensors that go quiet:** a sensor never heard since the node began to listen is judged like any other, the allowance starts again whenever the radio changes hands, a sensor is also judged through the server's feed, and one that is silent when you arm is refused (*zones open*) or, when forced, left out until you disarm instead of ringing the alarm in the middle of the exit delay.
+- **A Zigbee coordinator on the network now takes over:** the node builds its own conversation also when the radio is a coordinator reached over the network; before, with one set, it never took the radio when the server went away.
+- **Loop limits stop at 3000 mV:** the converter does not read above about 3.1 V, so a limit up there turned a cut wire into a contact; the settings and the panel refuse it.
+- The node reads the converter with nobody else touching it; the events are written to flash at most every half minute unless they change the state of the house; the queues of the Zigbee conversation are bounded.
+- HTTP answers 423 (locked out) and 408 (upload stalled) with their own status lines, and a user change that could not be written is told as a storage error.
+- The panel tells every error the node can answer with in the eight languages (the updater's, the reset's, the siren's and the rest), and a test fails when a new code has no text; the radio state *through the network coordinator* has its words.
+- The startup line says *alarm node*, the comments say eight languages and ESP-IDF 5.4 (the one the container builds with), and `secrets/node.conf.example` exists.
+- The documents say what the node does today: the zone feed is believed by the panel, what a restart brings back, the siren's relay, the direct HTTP API, the Bluetooth pairing with its passkey, the loop's margins and the files that differ from the electrical node's.
+- Tests: 477,588 checks in six programs plus the panel texts; new ones cover a second alarm after the siren timed out, the restart of a disarmed alarm, of a silenced one and of a lockout, silent and mute Zigbee sensors, and the loop limit.
+- Shared with the other nodes (from ARMOR-COMMON's firmware base): the pairing of Bluetooth closes after repeated failures, the random generator keeps away from the converter, a user write is all-or-nothing, a repeated key in a JSON document is refused and four-number firmware versions are understood.
+
 ## [0.3.0] - The last events survive a restart
 
 - **Events kept across a restart:** the last ten events of the panel (armed, alarm, disarmed, bad PIN...) are written to flash while the node has real time and come back after a power cut, a watchdog reset or an update, told as "seconds ago" by the wall clock. Before the clock is set their age is unknown, so they are not told.

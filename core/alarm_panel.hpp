@@ -9,7 +9,8 @@
 //   - Arming is refused while a zone that matters in that mode is open or tampered with, unless `force` is given: the open zones are then left out until the system is disarmed (an
 //     always-zone, smoke or panic, that is sounding can never be left out).
 //   - During the exit delay only an always-zone or a tamper raises the alarm: the person leaving is not an intruder.
-//   - The alarm LATCHES: only a correct disarm ends it. The siren stops by itself after `siren_max_s` (the alarm stays latched, the neighbours do not have to put up with it).
+//   - The alarm LATCHES: only a correct disarm ends it. The siren stops by itself after `siren_max_s` (the alarm stays latched, the neighbours do not have to put up with it); a zone that
+//     has not sounded in this alarm yet sounds it again, at most three times.
 //   - A zone raises the alarm when it CHANGES to triggered (or tamper), not while it stays so: a smoke detector that is still sounding when you disarm does not restart the alarm until it
 //     has been quiet and sounds again. At the moment of arming the zones are looked at as they are (see above).
 //   - Always-zones (smoke, panic) and a tamper alarm in every state, armed or not.
@@ -141,6 +142,8 @@ class Panel {
     phase_ = Phase::kDisarmed;
     mode_ = Mode::kDisarmed;
     siren_on_ = false;
+    alarmed_.clear();
+    resounds_ = 0;
     for (Slot& s : slots_) s.bypassed = false;
     note(now_ms, EventKind::kDisarmed, "");
     return Refusal::kNone;
@@ -154,6 +157,8 @@ class Panel {
     phase_ = Phase::kDisarmed;
     mode_ = Mode::kDisarmed;
     siren_on_ = false;
+    alarmed_.clear();
+    resounds_ = 0;
     for (Slot& s : slots_) s.bypassed = false;
     note(now_ms, EventKind::kDisarmed, "");
     return Refusal::kNone;
@@ -174,11 +179,15 @@ class Panel {
     Phase phase = Phase::kDisarmed;
     Mode mode = Mode::kDisarmed;
     std::vector<std::string> bypassed;
-    bool operator==(const Saved& other) const { return phase == other.phase && mode == other.mode && bypassed == other.bypassed; }
+    bool silenced = false;   // the alarm was running but its siren had timed out
+    std::uint32_t lockout = 0;   // 0 none, 1..3 the lockout that was running (its length grows with it)
+    bool operator==(const Saved& other) const { return phase == other.phase && mode == other.mode && bypassed == other.bypassed && silenced == other.silenced && lockout == other.lockout; }
   };
   Saved saved() const {
     Saved out;
-    if (phase_ == Phase::kDisarmed && !siren_on_) return out;
+    if (locked_until_ms_ != 0) out.lockout = lockouts_ < 1 ? 1 : lockouts_;
+    if (phase_ == Phase::kDisarmed) return out;
+    out.silenced = phase_ == Phase::kAlarm && !siren_on_;
     out.mode = mode_;
     out.phase = (phase_ == Phase::kAlarm || phase_ == Phase::kEntryDelay) ? Phase::kAlarm : (phase_ == Phase::kDisarmed ? Phase::kDisarmed : Phase::kArmed);
     for (const Slot& s : slots_) if (s.bypassed) out.bypassed.push_back(s.zone.id);
@@ -186,14 +195,27 @@ class Panel {
   }
   // Takes the saved state back. Returns true when the panel is not disarmed afterwards.
   bool restore(const Saved& saved, std::uint64_t now_ms) {
-    if (phase_ != Phase::kDisarmed || saved.phase == Phase::kDisarmed || saved.mode == Mode::kDisarmed) return false;
+    // a lockout that was running comes back for as long as it lasts (the clock starts again with the node)
+    if (saved.lockout > 0 && saved.lockout <= 3 && locked_until_ms_ == 0) {
+      static constexpr std::uint32_t kGrowth[3] = {1, 5, 15};
+      lockouts_ = saved.lockout;
+      locked_until_ms_ = now_ms + static_cast<std::uint64_t>(timing_.lockout_s) * kGrowth[saved.lockout - 1] * 1000ULL;
+    }
+    if (phase_ != Phase::kDisarmed || saved.phase == Phase::kDisarmed) return false;
+    // an alarm of an always-zone (smoke, panic) or of a tamper runs with the system disarmed: it comes back as the same alarm, not as nothing
+    if (saved.mode == Mode::kDisarmed && saved.phase != Phase::kAlarm) return false;
     for (Slot& s : slots_) s.bypassed = false;
     for (const std::string& id : saved.bypassed) if (Slot* s = find(id)) s->bypassed = true;
     mode_ = saved.mode;
-    phase_ = Phase::kArmed;
-    phase_since_ms_ = now_ms;
-    note(now_ms, EventKind::kArmed, "");
-    if (saved.phase == Phase::kAlarm) raise(now_ms, "");
+    if (saved.mode != Mode::kDisarmed) {
+      phase_ = Phase::kArmed;
+      phase_since_ms_ = now_ms;
+      note(now_ms, EventKind::kArmed, "");
+    }
+    if (saved.phase == Phase::kAlarm) {
+      raise(now_ms, "");
+      if (saved.silenced) siren_on_ = false;   // it had been silenced by the timeout: a restart does not make it louder
+    }
     return true;
   }
 
@@ -235,10 +257,23 @@ class Panel {
   }
 
   void raise(std::uint64_t now_ms, const std::string& zone) {
-    if (phase_ == Phase::kAlarm) return;
+    if (phase_ == Phase::kAlarm) {
+      // The alarm is latched, but a zone that has not sounded yet (or any trigger once the siren has timed out) is news: the siren sounds again, at most kMaxResounds times, and it is noted.
+      const bool fresh = !zone.empty() && std::find(alarmed_.begin(), alarmed_.end(), zone) == alarmed_.end();
+      if ((!fresh && siren_on_) || resounds_ >= kMaxResounds) return;
+      ++resounds_;
+      if (fresh) alarmed_.push_back(zone);
+      alarm_since_ms_ = now_ms;
+      siren_on_ = true;
+      note(now_ms, EventKind::kAlarm, zone);
+      return;
+    }
     phase_ = Phase::kAlarm;
     alarm_since_ms_ = now_ms;
     siren_on_ = true;
+    resounds_ = 0;
+    alarmed_.clear();
+    if (!zone.empty()) alarmed_.push_back(zone);
     note(now_ms, EventKind::kAlarm, zone);
   }
 
@@ -247,7 +282,10 @@ class Panel {
     if (s.bypassed && s.state != ZoneState::kTamper) return;   // a zone left out ignores its contact, never its sabotage
     if (s.state == ZoneState::kTamper || s.zone.kind == ZoneKind::kAlways) { raise(now_ms, s.zone.id); return; }   // in every state, even disarmed
     switch (phase_) {
-      case Phase::kDisarmed: case Phase::kExitDelay: case Phase::kAlarm: return;
+      case Phase::kDisarmed: case Phase::kExitDelay: return;
+      case Phase::kAlarm:   // already ringing: a zone that guards in this mode and has not sounded yet sounds the siren again (raise decides)
+        if (mode_ != Mode::kDisarmed && (s.zone.kind == ZoneKind::kInstant || s.zone.kind == ZoneKind::kEntry || (s.zone.kind == ZoneKind::kInterior && mode_ == Mode::kAway))) raise(now_ms, s.zone.id);
+        return;
       case Phase::kEntryDelay:
         if (s.zone.kind == ZoneKind::kInstant || (s.zone.kind == ZoneKind::kInterior && mode_ == Mode::kAway)) raise(now_ms, s.zone.id);
         return;
@@ -270,6 +308,9 @@ class Panel {
   std::uint64_t phase_since_ms_ = 0, alarm_since_ms_ = 0, locked_until_ms_ = 0;
   std::uint32_t wrong_pins_ = 0, lockouts_ = 0;
   std::string entry_zone_;
+  static constexpr std::uint32_t kMaxResounds = 3;
+  std::uint32_t resounds_ = 0;
+  std::vector<std::string> alarmed_;   // the zones that have sounded in this alarm
 };
 
 // The saved state as one line the flash can hold: "armed|away|front-door,window" (the phase, the mode, the zones left out). Anything that is not exactly that is not a saved state
@@ -277,20 +318,42 @@ class Panel {
 inline std::string saved_text(const Panel::Saved& saved) {
   std::string text = std::string(phase_text(saved.phase)) + "|" + (saved.mode == Mode::kAway ? "away" : saved.mode == Mode::kStay ? "stay" : "disarmed") + "|";
   for (std::size_t i = 0; i < saved.bypassed.size(); ++i) text += (i ? "," : "") + saved.bypassed[i];
+  // optional extras after a third bar: "silenced" and "lock1".."lock3"
+  if (saved.silenced || saved.lockout > 0) {
+    text += "|";
+    if (saved.silenced) text += "silenced";
+    if (saved.lockout > 0) text += std::string(saved.silenced ? "," : "") + "lock" + std::to_string(saved.lockout);
+  }
   return text;
 }
 inline bool parse_saved(const std::string& text, Panel::Saved& out) {
   const std::size_t first = text.find('|'), second = first == std::string::npos ? first : text.find('|', first + 1);
   if (second == std::string::npos || text.size() > 400) return false;
+  const std::size_t third = text.find('|', second + 1);
+  if (third != std::string::npos && text.find('|', third + 1) != std::string::npos) return false;
   Panel::Saved saved;
   const std::string phase = text.substr(0, first), mode = text.substr(first + 1, second - first - 1);
   if (phase == "armed") saved.phase = Phase::kArmed; else if (phase == "alarm") saved.phase = Phase::kAlarm; else if (phase == "disarmed") saved.phase = Phase::kDisarmed; else return false;
   if (mode == "away") saved.mode = Mode::kAway; else if (mode == "stay") saved.mode = Mode::kStay; else if (mode == "disarmed") saved.mode = Mode::kDisarmed; else return false;
   if ((saved.phase == Phase::kDisarmed) != (saved.mode == Mode::kDisarmed) && saved.phase != Phase::kAlarm) return false;
+  const std::size_t listed_end = third == std::string::npos ? text.size() : third;
   std::string id;
-  for (std::size_t i = second + 1; i <= text.size(); ++i) {
-    if (i == text.size() || text[i] == ',') { if (!id.empty()) saved.bypassed.push_back(id); id.clear(); }
+  for (std::size_t i = second + 1; i <= listed_end; ++i) {
+    if (i == listed_end || text[i] == ',') { if (!id.empty()) saved.bypassed.push_back(id); id.clear(); }
     else id += text[i];
+  }
+  if (third != std::string::npos) {
+    std::string word;
+    for (std::size_t i = third + 1; i <= text.size(); ++i) {
+      if (i == text.size() || text[i] == ',') {
+        if (word == "silenced") saved.silenced = true;
+        else if (word == "lock1") saved.lockout = 1;
+        else if (word == "lock2") saved.lockout = 2;
+        else if (word == "lock3") saved.lockout = 3;
+        else if (!word.empty()) return false;
+        word.clear();
+      } else word += text[i];
+    }
   }
   out = saved;
   return true;

@@ -39,6 +39,7 @@ static void test_loop() {
   CHECK(classify_loop(400, limits) == ZoneState::kNormal && classify_loop(1199, limits) == ZoneState::kNormal);   // the closed contact
   CHECK(classify_loop(1200, limits) == ZoneState::kTriggered && classify_loop(2399, limits) == ZoneState::kTriggered);   // the open contact
   CHECK(classify_loop(2400, limits) == ZoneState::kTamper && classify_loop(3300, limits) == ZoneState::kTamper);   // a cut wire
+  CHECK(limits_are_valid({400, 1200, 3000}) && !limits_are_valid({400, 1200, 3200}));   // the converter does not read above about 3.1 V: a limit up there would take a cut wire for a contact
   LoopLimits bad = limits;
   bad.short_below_mv = 0; CHECK(!limits_are_valid(bad)); bad = limits;
   bad.normal_below_mv = 300; CHECK(!limits_are_valid(bad)); bad = limits;
@@ -285,12 +286,14 @@ static void test_random() {
       now += rng() % 4000;
       const Phase before = p.phase();
       const bool was_siren = p.siren();
+      bool zone_fed = false;   // a zone that sounds can bring a timed-out siren back; nothing else can
       switch (rng() % 7) {
         case 0: case 1: {
           const std::string id = ids[rng() % 5];
           const ZoneState state = static_cast<ZoneState>(rng() % 3);
           if (state == ZoneState::kTamper || id == "smoke") forced_alarm_source = forced_alarm_source || state != ZoneState::kNormal;
           p.set_zone(id, state, now);
+          zone_fed = true;
           break;
         }
         case 2: p.arm(static_cast<Mode>(1 + rng() % 2), rng() % 2 == 0, now); break;
@@ -308,8 +311,8 @@ static void test_random() {
       CHECK(!p.siren() || p.phase() == Phase::kAlarm);
       // an alarm only ends through a disarm: leaving the alarm phase means disarmed
       if (before == Phase::kAlarm) CHECK(p.phase() == Phase::kAlarm || p.phase() == Phase::kDisarmed);
-      // a siren that was off in an alarm does not come back on by itself
-      if (before == Phase::kAlarm && !was_siren && p.phase() == Phase::kAlarm) CHECK(!p.siren());
+      // a siren that was off in an alarm does not come back on by itself, only a zone that sounds brings it back
+      if (before == Phase::kAlarm && !was_siren && p.phase() == Phase::kAlarm && !zone_fed) CHECK(!p.siren());
       // a disarmed, quiet history of the always-zones and tampers means no alarm
       if (!forced_alarm_source && p.phase() == Phase::kDisarmed) CHECK(!p.siren());
       // the entry delay never runs past its time (ticked every step, so within one tick)
@@ -379,6 +382,58 @@ static void test_restart_and_tamper() {
   CHECK(stuck.arm(Mode::kAway, true, 3) == Refusal::kZonesOpen && stuck.phase() == Phase::kDisarmed);
 }
 
+// ---- a long alarm, an alarm with the system disarmed and a lockout across a restart ------------------------------------------------------------
+
+static void test_resound_and_restore_more() {
+  // the siren timed out, then another zone sounds: it sounds again (and is noted), at most three times
+  Panel p(quick(), house(), "1234");
+  p.arm(Mode::kAway, false, 0); p.tick(11000);
+  p.set_zone("window", ZoneState::kTriggered, 12000);
+  CHECK(p.phase() == Phase::kAlarm && p.siren());
+  p.tick(12000 + 61000);
+  CHECK(p.phase() == Phase::kAlarm && !p.siren());
+  p.set_zone("hall-motion", ZoneState::kTriggered, 80000);
+  CHECK(p.siren());
+  std::size_t alarms = 0;
+  for (const Event& e : p.events()) if (e.kind == EventKind::kAlarm) ++alarms;
+  CHECK(alarms == 2);
+  // the same zone sounding again while the siren is on changes nothing
+  p.set_zone("hall-motion", ZoneState::kNormal, 81000);
+  p.set_zone("hall-motion", ZoneState::kTriggered, 82000);
+  alarms = 0;
+  for (const Event& e : p.events()) if (e.kind == EventKind::kAlarm) ++alarms;
+  CHECK(alarms == 2);
+  CHECK(p.disarm("1234", 90000) == Refusal::kNone && !p.siren());
+
+  // an alarm of smoke with the system disarmed comes back as the same alarm after a restart
+  Panel smoke(quick(), house(), "1234");
+  smoke.set_zone("smoke", ZoneState::kTriggered, 0);
+  CHECK(smoke.phase() == Phase::kAlarm && smoke.mode() == Mode::kDisarmed);
+  Panel::Saved saved = smoke.saved();
+  Panel::Saved read;
+  CHECK(saved.phase == Phase::kAlarm && saved.mode == Mode::kDisarmed && parse_saved(saved_text(saved), read) && read == saved);
+  Panel back(quick(), house(), "1234");
+  CHECK(back.restore(read, 5) && back.phase() == Phase::kAlarm && back.mode() == Mode::kDisarmed && back.siren());
+
+  // an alarm whose siren had timed out comes back without the siren
+  smoke.tick(61000);
+  saved = smoke.saved();
+  CHECK(saved.silenced && parse_saved(saved_text(saved), read) && read.silenced);
+  Panel quiet(quick(), house(), "1234");
+  CHECK(quiet.restore(read, 5) && quiet.phase() == Phase::kAlarm && !quiet.siren());
+
+  // a lockout comes back after a restart, and the right PIN does not get through it
+  Panel locked(quick(), house(), "1234");
+  for (int i = 0; i < 3; ++i) locked.disarm("0000", 1000 + i);
+  CHECK(locked.locked_out(2000));
+  saved = locked.saved();
+  CHECK(saved.lockout == 1 && saved.phase == Phase::kDisarmed && parse_saved(saved_text(saved), read) && read == saved);
+  Panel after(quick(), house(), "1234");
+  after.restore(read, 10);
+  CHECK(after.locked_out(11) && after.disarm("1234", 11) == Refusal::kLockedOut && !after.locked_out(10 + 31000));
+  CHECK(!parse_saved("armed|away||nonsense", read) && !parse_saved("armed|away||silenced|lock1", read));
+}
+
 int main() {
   test_loop();
   test_zone_names();
@@ -395,6 +450,7 @@ int main() {
   test_siren_times_out();
   test_zero_delays_and_log();
   test_restart_and_tamper();
+  test_resound_and_restore_more();
   test_random();
   std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;

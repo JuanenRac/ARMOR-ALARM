@@ -88,7 +88,7 @@ class Runner {
     if (!buttons_[index].feed(!pin_high, now_ms)) return press;
     press.fired = true;
     press.mode = settings_.buttons[index].action == "arm_stay" ? Mode::kStay : Mode::kAway;
-    press.refusal = panel_.arm(press.mode, false, now_ms);
+    press.refusal = arm_checked(press.mode, false, now_ms);
     return press;
   }
 
@@ -108,12 +108,13 @@ class Runner {
 
   void tick(std::uint64_t now_ms) {
     panel_.tick(now_ms);
+    if (panel_.phase() == Phase::kDisarmed) left_out_.fill(false);   // a sensor left out lasts until the system is disarmed
     supervise_zigbee(now_ms);
     for (ZoneView& view : views_) if (view.enabled) view.bypassed = panel_.bypassed(view.id);
   }
 
   // From the panel's own page: arming needs no PIN, disarming does.
-  Refusal arm(Mode mode, bool force, std::uint64_t now_ms) { return panel_.arm(mode, force, now_ms); }
+  Refusal arm(Mode mode, bool force, std::uint64_t now_ms) { return arm_checked(mode, force, now_ms); }
   Refusal disarm(const std::string& pin, std::uint64_t now_ms) { return panel_.disarm(pin, now_ms); }
 
   // The state of a Zigbee zone as the server tells it. It counts only while the server holds the radio: when this node holds it, the node hears the sensors itself and what the server says
@@ -137,7 +138,7 @@ class Runner {
     if (!settings_.server.commands || !parse_command(text, settings_.node_id, command)) return reply;
     reply.understood = true;
     reply.command = command;
-    reply.refusal = command.action == Action::kArm ? panel_.arm(command.mode, command.force, now_ms) : panel_.disarm_authorized(now_ms);
+    reply.refusal = command.action == Action::kArm ? arm_checked(command.mode, command.force, now_ms) : panel_.disarm_authorized(now_ms);
     return reply;
   }
 
@@ -150,24 +151,26 @@ class Runner {
   }
 
   // A Zigbee sensor that went quiet is lost (a flat battery, an inhibited radio) and must not keep its last "normal": past the limit it is marked silent and, while the system is armed
-  // or arming, its zone says tamper until it is heard again. With the limit at 0 nothing is supervised. A sensor never heard since the start is not judged (nothing to compare with).
-  // Whether the radio is this node's: the sensors only reach it while it holds the radio (the server holds it otherwise), so what is not heard then says nothing. Every time the radio is
-  // not ours the sensors are given their whole allowance again from the moment it becomes ours.
+  // or arming, its zone says tamper until it is heard again. With the limit at 0 nothing is supervised. A sensor never heard is judged from the moment the node began to listen (the
+  // start, or the moment the radio changed hands): one that was dead from the start is how a perimeter is defeated too.
+  // Whether the radio is this node's: the sensors reach the node itself while it holds the radio, and reach it through the server's feed otherwise; either way what is not heard for the
+  // limit is lost. When the radio changes hands the sensors are given their whole allowance again from that moment.
   void radio_held(bool held, std::uint64_t now_ms) {
-    if (!held) for (ZoneView& view : views_) if (view.zigbee) { view.heard_ms = now_ms; view.silent = false; }
+    if (held != radio_) { for (ZoneView& view : views_) if (view.zigbee) { view.heard_ms = now_ms; view.silent = false; } listening_since_ms_ = now_ms; }
     radio_ = held;
   }
 
   void supervise_zigbee(std::uint64_t now_ms) {
-    if (!radio_) return;
     const std::uint64_t limit = static_cast<std::uint64_t>(settings_.panel.timing.zigbee_silence_min) * 60000ULL;
     if (limit == 0) return;
     for (ZoneView& view : views_) {
-      if (!view.enabled || !view.zigbee || !view.has_reading) continue;
-      const bool quiet = now_ms - view.heard_ms > limit;
-      if (quiet == view.silent) { if (quiet && panel_.phase() != Phase::kDisarmed && view.state != ZoneState::kTamper) { view.state = ZoneState::kTamper; panel_.set_zone(view.id, ZoneState::kTamper, now_ms); } continue; }
+      if (!view.enabled || !view.zigbee) continue;
+      const std::size_t slot = static_cast<std::size_t>(&view - views_.data());
+      const std::uint64_t last = view.has_reading ? view.heard_ms : listening_since_ms_;
+      const bool quiet = now_ms - last > limit;
+      if (quiet == view.silent) { if (quiet && !left_out_[slot] && panel_.phase() != Phase::kDisarmed && view.state != ZoneState::kTamper) { view.state = ZoneState::kTamper; panel_.set_zone(view.id, ZoneState::kTamper, now_ms); } continue; }
       view.silent = quiet;
-      if (quiet && panel_.phase() != Phase::kDisarmed) { view.state = ZoneState::kTamper; panel_.set_zone(view.id, ZoneState::kTamper, now_ms); }
+      if (quiet && !left_out_[slot] && panel_.phase() != Phase::kDisarmed) { view.state = ZoneState::kTamper; panel_.set_zone(view.id, ZoneState::kTamper, now_ms); }
     }
   }
 
@@ -188,6 +191,19 @@ class Runner {
 
  private:
   bool radio_ = false;
+  std::uint64_t listening_since_ms_ = 0;
+  std::array<bool, config::kZoneCount> left_out_{};   // Zigbee sensors that were silent when a forced arming left them out
+
+  // Arming looks at the Zigbee sensors that have gone silent as it looks at an open zone: without `force` it is refused ("zones_open"), with it they are left out until the system is
+  // disarmed (a silent sensor that were let through would raise the alarm on the next turn, in the middle of the exit delay).
+  Refusal arm_checked(Mode mode, bool force, std::uint64_t now_ms) {
+    bool any_silent = false;
+    if (panel_.phase() == Phase::kDisarmed && mode != Mode::kDisarmed) for (const ZoneView& view : views_) any_silent = any_silent || (view.enabled && view.zigbee && view.silent);
+    if (any_silent && !force) return Refusal::kZonesOpen;
+    const Refusal result = panel_.arm(mode, force, now_ms);
+    if (result == Refusal::kNone) for (std::size_t i = 0; i < views_.size(); ++i) left_out_[i] = views_[i].enabled && views_[i].zigbee && views_[i].silent;
+    return result;
+  }
   static std::vector<Zone> zones_of(const config::Settings& settings) {
     std::vector<Zone> zones;
     for (const config::ZoneSetting& zone : settings.zones) if (zone.enabled) zones.push_back({zone.id, zone.name, zone.kind});

@@ -20,9 +20,9 @@ it by name or by service.
 
 ## Security
 
-* Writing needs an **encrypted link**: LE Secure Connections, pairing "just works", no bonding is kept. The node asks the phone to pair as soon as it
-  connects, so Android shows its pairing dialog once per connection. This stops someone listening to the air. It does **not** stop someone who is present
-  while the phone pairs (an active man in the middle), because "just works" has no way to check who is on the other end.
+* Writing needs an **encrypted, authenticated link**: LE Secure Connections with a passkey (the node displays it, in the sense of the pairing: it prints it on its USB console and an
+  administrator can read it in the panel), no bonding is kept. The node asks the phone to pair as soon as it connects, so Android shows its pairing dialog once per connection and asks for the
+  six digits. This stops someone listening to the air and, because the passkey must be known, someone who is present while the phone pairs (an active man in the middle).
 * On top of the link, every operation except `hello` needs the **set-up code** (a node with no user) or a **login** (a node with users), and changing
   anything needs an administrator. The set-up code is the one the node shows on its USB console, or the one derived from the fleet secret and the node's
   MAC (ARMOR-RADAR's `tools/adopt_node.py` computes it, and the app can when it is given the secret).
@@ -60,7 +60,7 @@ Errors: `bad_request` (id 0: what arrived was not a request), `unknown_op`, `set
 
 | op | Needs | args | data of the answer |
 |---|---|---|---|
-| `hello` | nothing | | `kind` (`radar`, `solar` or `electrical`), `node_id`, `name`, `mac`, `firmware`, `setup` (true when the node has no user), `layout`, `has_ip`, `ip`, `sta_connected`, `sta_ssid`, `sta_error` (why the Wi-Fi station is not connected: `network_not_found`, `wrong_password` or `failed`), `ap_active` |
+| `hello` | nothing | | `kind` (`radar`, `solar`, `electrical` or `alarm`), `node_id`, `name`, `mac`, `firmware`, `setup` (true when the node has no user), `layout`, `has_ip`, `ip`, `sta_connected`, `sta_ssid`, `sta_error` (why the Wi-Fi station is not connected: `network_not_found`, `wrong_password` or `failed`), `ap_active` |
 | `setup` | a node with no user | `code`, `user`, `password` | `{"restart_required":true}`; the connection is now signed in as that administrator, and the node keeps its set-up state until a `reboot` |
 | `login` | a node with users | `user`, `password` | `{"role":"admin"}` or `"viewer"` |
 | `logout` | | | |
@@ -91,7 +91,7 @@ and then `reboot`. `wifi.scan` gives the app the list of networks to choose from
 
 * The radio side (NimBLE) builds in the ESP-IDF container for both boards, and the framing, the operations and their access rules are tested on a computer (`tests/test_ble.cpp`, the same
   protocol and the same code as ARMOR-RADAR's node); the whole thing has not run on a board, and no phone has talked to it.
-* The three kinds of node of A.R.M.O.R. (radar, solar and electrical) answer the same protocol with the same service and characteristics, so one app configures all of them; what a
+* The kinds of node of A.R.M.O.R. (radar, solar, electrical and alarm) answer the same protocol with the same service and characteristics, so one app configures all of them; what a
   node lists in its settings differs (radars and pins, serial ports, meters), and the app only touches what they all have: name, Wi-Fi, address, broker and Bluetooth.
-* The "just works" pairing is the weakest part; a passkey pairing would need the node to show the passkey (it has no display), so it is not offered.
+* The passkey is derived from the set-up code and is the same for every pairing of a node (a random one for each pairing would be better and is not done yet); five failed pairings close the door for five minutes.
 * The set-up code and the passwords are sent inside the encrypted link; a phone that pairs with an impostor node would send them to it.

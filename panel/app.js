@@ -1,5 +1,5 @@
 /* ARMOR-ALARM node panel - the pages. Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
-   text.js (the seven languages) is joined in front of this file when the panel is packed, so LANGS and L exist here.
+   text.js (the eight languages) is joined in front of this file when the panel is packed, so LANGS and L exist here.
    No framework and no inline style: the panel is served with a strict content-security policy. */
 "use strict";
 
@@ -54,7 +54,7 @@ async function api(method, path, body) {
   return { ok: response.ok, status: response.status, data };
 }
 
-const errorText = code => (L["e_" + code] ? t("e_" + code) : String(code || "?"));
+const errorText = code => (L["e_" + code] ? t("e_" + code) : /^http_\d{3}$/.test(String(code)) ? t("e_http") + " " + String(code).slice(5) : String(code || "?"));
 const problemText = code => (L["p_" + code] ? t("p_" + code) : String(code));
 
 function pickLanguage(preferred) {
@@ -628,8 +628,8 @@ function buttonsCard() {
 function zonesPage() {
   return el("div", {}, note(t("alWarn")), el("p", { class: "muted" }, t("zonesIntro")), note(t("zonesRestart"), "info"),
     el("div", { class: "grid wide" }, [el("section", { class: "card" }, el("h2", {}, t("loopTitle")), el("p", { class: "muted" }, t("loopHelp")),
-      field("loopShort", "loop.short_below_mv", { type: "number", min: 0, max: 3300, step: "any" }), field("loopNormal", "loop.normal_below_mv", { type: "number", min: 0, max: 3300, step: "any" }),
-      field("loopTriggered", "loop.triggered_below_mv", { type: "number", min: 0, max: 3300, step: "any" })), buttonsCard()].concat(Array.from({ length: 8 }, (_, i) => zoneCard(i)))));
+      field("loopShort", "loop.short_below_mv", { type: "number", min: 0, max: 3000, step: "any" }), field("loopNormal", "loop.normal_below_mv", { type: "number", min: 0, max: 3000, step: "any" }),
+      field("loopTriggered", "loop.triggered_below_mv", { type: "number", min: 0, max: 3000, step: "any" })), buttonsCard()].concat(Array.from({ length: 8 }, (_, i) => zoneCard(i)))));
 }
 
 // ---- the delays, the PIN, the siren and the server ------------------------------------------------------------------------------------

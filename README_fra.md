@@ -21,14 +21,14 @@
   <img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL 3.0">
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
-  <img src="https://img.shields.io/badge/Checks-521%2C307-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.3.0-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Checks-477%2C588-2ea44f.svg" alt="Checks">
+  <img src="https://img.shields.io/badge/Version-0.3.1-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
 ---
 
-**Vérification d'honnêteté - ce qui fonctionne aujourd'hui:** Ce qui existe, c'est le **cœur de l'alarme** (ce qu'est une zone, comment une boucle câblée lue par l'ADC devient un état, les règles de la centrale : armement, temporisations, l'alarme, la sirène, le PIN avec verrouillage) et le **firmware du nœud** construit dessus (réglages, panneau web, messages avec le serveur, le pont de la radio Zigbee, un coordinateur Zigbee sur le réseau, relais, Bluetooth, mises à jour signées), qui se compile pour les deux cartes ; le cœur, les réglages, les messages et le panneau dans un vrai navigateur contre un nœud factice sont testés sur un ordinateur avec 521 307 vérifications dans 6 programmes de test. **Rien n'a tourné sur une carte ni sur une installation réelle, aucune zone n'a été câblée ni aucune sirène connectée, la conversation Zigbee du nœud avec un coordinateur (local ou sur le réseau) est écrite et testée contre un coordinateur factice mais n'a jamais tourné contre un vrai coordinateur ni un vrai capteur, et ce n'est pas un système d'alarme certifié.**
+**Vérification d'honnêteté - ce qui fonctionne aujourd'hui:** Ce qui existe, c'est le **cœur de l'alarme** (ce qu'est une zone, comment une boucle câblée lue par l'ADC devient un état, les règles de la centrale : armement, temporisations, l'alarme, la sirène, le PIN avec verrouillage) et le **firmware du nœud** construit dessus (réglages, panneau web, messages avec le serveur, le pont de la radio Zigbee, un coordinateur Zigbee sur le réseau, relais, Bluetooth, mises à jour signées), qui se compile pour les deux cartes ; le cœur, les réglages, les messages et le panneau dans un vrai navigateur contre un nœud factice sont testés sur un ordinateur avec 477 588 vérifications dans 6 programmes de test. **Rien n'a tourné sur une carte ni sur une installation réelle, aucune zone n'a été câblée ni aucune sirène connectée, la conversation Zigbee du nœud avec un coordinateur (local ou sur le réseau) est écrite et testée contre un coordinateur factice mais n'a jamais tourné contre un vrai coordinateur ni un vrai capteur, et ce n'est pas un système d'alarme certifié.**
 
 ---
 
@@ -36,10 +36,10 @@
 
 | | |
 |---|---|
-| Version | `0.3.0` |
+| Version | `0.3.1` |
 | Maturité | Fonctionnel |
-| Tests | 521,307 checks in 6 programs (`ctest`) |
-| Technologie | C++17 host-tested core; ESP-IDF 5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
+| Tests | 477,588 checks in 6 programs (`ctest`) |
+| Technologie | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | Sur matériel réel | Aucun pour l'instant : ni carte, ni zone, ni sirène, ni coordinateur Zigbee connectés (seulement des tests sur ordinateur, la compilation et le panneau dans un navigateur) |
 
 ## 🎯 Présentation
@@ -54,6 +54,7 @@
 * **Un redémarrage ne désarme pas la maison :** le mode, une alarme en cours et les zones exclues sont gardés en flash et repris au démarrage ; une boucle coupée ou en court-circuit n'est jamais exclue ; les messages passent par une file (pas d'interblocage avec le broker) et le chien de garde redémarre la carte si la tâche qui lit les zones s'arrête.
 * **Mises à jour par radio signées :** le nœud n'installe depuis GitHub qu'une image dont le SHA-256 correspond et qui porte une signature Ed25519 valide du responsable (la clé publique est dans le firmware, la privée ne quitte jamais le responsable) ; un fichier envoyé à la main par un administrateur dans le panneau reste accepté. Les pages et messages du panneau sont en huit langues.
 * **Appairage Bluetooth avec un PIN :** le PIN à six chiffres est dérivé du code de configuration, imprimé sur la console USB et montré à un administrateur dans le panneau ; le téléphone doit le saisir avant de pouvoir écrire les réglages du nœud.
+* **Sirène et redémarrages :** le relais de la sirène appartient à l'alarme seule (ni le broker, ni la centrale, ni le panneau ne peuvent le bouger, et il ne s'ouvre pas à la perte du broker) ; une zone qui n'avait pas encore sonné refait sonner la sirène après son délai ; après un redémarrage reviennent une alarme de fumée ou de panique système désarmé, une alarme silencieuse et un blocage ; une réinitialisation à la main est refusée alarme armée ; un capteur Zigbee qui ne parle jamais compte comme perdu.
 
 ## 🖼️ Captures d'écran
 
@@ -83,10 +84,10 @@ ARMOR-ALARM/
 
 ## 🛠️ Environnement de développement
 
-**Prérequis:** a C++17 compiler for the host tests, the ESP-IDF 5.5 container to build the image, an ESP32-S3 board (PoE Ethernet or Wi-Fi)
+**Prérequis:** a C++17 compiler for the host tests, the ESP-IDF 5.4 container to build the image, an ESP32-S3 board (PoE Ethernet or Wi-Fi)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 521,307 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 477,588 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Voir [la conception](docs/DESIGN.md), [comment la centrale prend le relais du serveur](docs/FAILOVER.md) et les [notes de sécurité](docs/SAFETY.md).

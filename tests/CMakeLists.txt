@@ -21,3 +21,9 @@ add_test(NAME release COMMAND test_release)
 add_test(NAME base COMMAND test_base)
 add_test(NAME central COMMAND test_central)
 add_test(NAME zigbee COMMAND test_zigbee)
+
+# the panel's texts: eight languages in every row and a text for every error the firmware can answer with
+find_package(Python3 COMPONENTS Interpreter)
+if(Python3_FOUND)
+  add_test(NAME panel_text COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/check_panel_text.py)
+endif()

@@ -4,7 +4,7 @@
  * Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
  *
  * The hardware-independent core under core/ (the zones, the loop, the panel's rules, the settings, the messages) is built and tested on a computer (tests/); the files beside this one are built
- * with ESP-IDF 5.5 (tools/build_node.sh does it in a container). None of it has run on a board yet, no zone has been wired and no siren connected. This is not a certified alarm system.
+ * with ESP-IDF 5.4 (tools/build_node.sh does it in a container). None of it has run on a board yet, no zone has been wired and no siren connected. This is not a certified alarm system.
  *
  * What a node is, in one paragraph: everything that differs from node to node (its identity, its Wi-Fi, its broker, its zones and its panel) is one settings
  * document in flash, edited from the node's own web panel, so the same firmware image serves every node and no password is compiled in. A node with no user yet is in
@@ -64,7 +64,10 @@ void boot_button_task(void*) {
   for (int elapsed_ms = 0; elapsed_ms < 30000; elapsed_ms += 100) {
     held_ms = gpio_get_level(kButton) == 0 ? held_ms + 100 : 0;
     if (held_ms >= 8000) {
+      // Whoever stands at the node must not be able to wipe an alarm that is guarding the house: while it is armed or ringing the button does nothing.
+      if (armor::manager::guarding()) { ESP_LOGW(kTag, "BOOT held for 8 s, but the alarm is armed: nothing is erased"); held_ms = 0; vTaskDelay(pdMS_TO_TICKS(100)); continue; }
       ESP_LOGW(kTag, "BOOT held for 8 s: erasing the settings and the users");
+      armor::manager::forget();
       armor::store::factory_reset();
       armor::network::disconnect_before_restart();
       esp_restart();
@@ -111,7 +114,7 @@ extern "C" void app_main() {
   ESP_ERROR_CHECK(esp_event_loop_create_default());
   const armor::config::Settings settings = armor::store::settings();
   const bool setup = armor::store::users_empty();
-  ESP_LOGI(kTag, "A.R.M.O.R. electrical node %s, firmware %s, MAC tail %s%s", settings.node_id.c_str(), esp_app_get_description()->version, armor::store::mac_tail().c_str(), setup ? ", NOT SET UP YET" : "");
+  ESP_LOGI(kTag, "A.R.M.O.R. alarm node %s, firmware %s, MAC tail %s%s", settings.node_id.c_str(), esp_app_get_description()->version, armor::store::mac_tail().c_str(), setup ? ", NOT SET UP YET" : "");
   if (armor::store::settings_are_stored()) {
     const armor::config::Problems problems = armor::config::validate(settings);
     for (const armor::config::Problem& problem : problems) ESP_LOGE(kTag, "settings problem: %s (%s)", problem.path.c_str(), problem.code.c_str());
@@ -145,6 +148,7 @@ extern "C" void app_main() {
   if (settings.zigbee.enabled && (settings.zigbee.rx == 0 || settings.zigbee.tx == 0 || settings.zigbee.reset == 0 || settings.zigbee.bootloader == 0)) button_is_a_pin = true;
   for (const auto& relay : settings.relays) if (relay.enabled && relay.pin == 0) button_is_a_pin = true;
   for (const auto& zone : settings.zones) if (zone.enabled && zone.pin == 0) button_is_a_pin = true;
+  for (const auto& button : settings.buttons) if (button.enabled && button.pin == 0) button_is_a_pin = true;
   if (!button_is_a_pin) xTaskCreate(boot_button_task, "boot-button", 3072, nullptr, 2, nullptr);
   xTaskCreate(confirm_firmware_task, "confirm", 3072, panel_ok ? reinterpret_cast<void*>(1) : nullptr, 2, nullptr);
 }

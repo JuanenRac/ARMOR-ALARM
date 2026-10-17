@@ -117,7 +117,13 @@ class LocalZigbee {
   struct SensorDevice { SensorConfig config; Device device; std::uint64_t asked_at_ms = 0; bool asked = false; };
   struct SirenDevice { std::uint64_t ieee = 0; std::uint16_t short_address = 0; std::uint64_t asked_at_ms = 0; bool asked = false; };
 
-  void queue(const znp::Frame& frame) { const std::vector<std::uint8_t> bytes = znp::encode(frame); out_.insert(out_.end(), bytes.begin(), bytes.end()); }
+  // What waits to be sent is bounded: a bridge that does not write must not make the node run out of memory (the oldest bytes of a queue that long are no use any more).
+  void queue(const znp::Frame& frame) {
+    const std::vector<std::uint8_t> bytes = znp::encode(frame);
+    if (out_.size() + bytes.size() > kMaxOut) out_.clear();
+    out_.insert(out_.end(), bytes.begin(), bytes.end());
+  }
+  static constexpr std::size_t kMaxOut = 4096;
 
   void send_step(State next, std::uint64_t now_ms) { state_ = next; tries_ = 0; send_current(now_ms); }
   void send_current(std::uint64_t now_ms) {

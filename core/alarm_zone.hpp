@@ -53,7 +53,7 @@ struct LoopLimits {
   double triggered_below_mv = 2400;
 };
 
-inline bool limits_are_valid(const LoopLimits& l) { return l.short_below_mv > 0 && l.short_below_mv < l.normal_below_mv && l.normal_below_mv < l.triggered_below_mv && l.triggered_below_mv <= 3300; }
+inline bool limits_are_valid(const LoopLimits& l) { return l.short_below_mv > 0 && l.short_below_mv < l.normal_below_mv && l.normal_below_mv < l.triggered_below_mv && l.triggered_below_mv <= 3000; }
 
 inline ZoneState classify_loop(double millivolts, const LoopLimits& limits) {
   if (millivolts < limits.short_below_mv) return ZoneState::kTamper;

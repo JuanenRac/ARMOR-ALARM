@@ -7,7 +7,7 @@
 //   armor/device/<node>/<relay>/set            ON | OFF | TOGGLE                 what the server (or anyone the broker allows) tells it
 // In Studio the device is added with the "ARMOR node" connection and the name <node>/<relay>; the server then switches it with its own rules (a risk that asks first, only an
 // administrator for the critical ones). Three independent things must all agree before a relay moves by a command: the node's setting `remote.relays` (off by default), the broker's
-// ACL (DEVOPS `mqtt_identity.sh electrical-relays <node> on`, off by default) and the device the operator created in the server. Nothing here touches a pin.
+// ACL (DEVOPS `mqtt_identity.sh alarm-relays <node> on`, off by default) and the device the operator created in the server. Nothing here touches a pin.
 #pragma once
 #include <cctype>
 #include <cstdint>

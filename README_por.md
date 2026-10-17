@@ -21,14 +21,14 @@
   <img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL 3.0">
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
-  <img src="https://img.shields.io/badge/Checks-521%2C307-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.3.0-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Checks-477%2C588-2ea44f.svg" alt="Checks">
+  <img src="https://img.shields.io/badge/Version-0.3.1-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
 ---
 
-**Verificação de honestidade - o que funciona hoje:** O que existe é o **núcleo do alarme** (o que é uma zona, como um laço com fios lido pelo ADC se torna um estado, as regras da central: armar, atrasos, o alarme, a sirene, o PIN com bloqueio) e o **firmware do nó** construído sobre ele (definições, painel web, mensagens com o servidor, a ponte do rádio Zigbee, um coordenador Zigbee na rede, relés, Bluetooth, atualizações assinadas), que compila para as duas placas; o núcleo, as definições, as mensagens e o painel num navegador real contra um nó de substituição são testados num computador com 521 307 verificações em 6 programas de teste. **Nada correu numa placa nem numa instalação real, nenhuma zona foi ligada com fios nem sirene ligada, a conversa Zigbee do próprio nó com um coordenador (local ou na rede) está escrita e testada contra um coordenador de substituição mas nunca correu contra um coordenador ou sensor reais, e isto não é um sistema de alarme certificado.**
+**Verificação de honestidade - o que funciona hoje:** O que existe é o **núcleo do alarme** (o que é uma zona, como um laço com fios lido pelo ADC se torna um estado, as regras da central: armar, atrasos, o alarme, a sirene, o PIN com bloqueio) e o **firmware do nó** construído sobre ele (definições, painel web, mensagens com o servidor, a ponte do rádio Zigbee, um coordenador Zigbee na rede, relés, Bluetooth, atualizações assinadas), que compila para as duas placas; o núcleo, as definições, as mensagens e o painel num navegador real contra um nó de substituição são testados num computador com 477 588 verificações em 6 programas de teste. **Nada correu numa placa nem numa instalação real, nenhuma zona foi ligada com fios nem sirene ligada, a conversa Zigbee do próprio nó com um coordenador (local ou na rede) está escrita e testada contra um coordenador de substituição mas nunca correu contra um coordenador ou sensor reais, e isto não é um sistema de alarme certificado.**
 
 ---
 
@@ -36,10 +36,10 @@
 
 | | |
 |---|---|
-| Versão | `0.3.0` |
+| Versão | `0.3.1` |
 | Maturidade | Funcional |
-| Testes | 521,307 checks in 6 programs (`ctest`) |
-| Tecnologia | C++17 host-tested core; ESP-IDF 5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
+| Testes | 477,588 checks in 6 programs (`ctest`) |
+| Tecnologia | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | Em hardware real | Nenhum ainda: nenhuma placa, zona, sirene ou coordenador Zigbee ligados (só testes no computador, a compilação e o painel num navegador) |
 
 ## 🎯 Visão geral
@@ -54,6 +54,7 @@
 * **Um reinício não desarma a casa:** o modo, um alarme em curso e as zonas deixadas de fora guardam-se na flash e retomam-se no arranque; um laço cortado ou em curto-circuito nunca se deixa de fora; as mensagens passam por uma fila (sem bloqueio mútuo com o broker) e o cão de guarda reinicia a placa se a tarefa que lê as zonas parar.
 * **Atualizações pelo ar assinadas:** o nó só instala do GitHub uma imagem cujo SHA-256 coincide e que leva uma assinatura Ed25519 válida do responsável (a chave pública está no firmware, a privada nunca sai do responsável); um ficheiro carregado à mão por um administrador no painel continua a ser aceite. As páginas e mensagens do painel estão em oito idiomas.
 * **Emparelhamento Bluetooth com PIN:** o PIN de seis dígitos deriva do código de configuração, é impresso na consola USB e mostrado a um administrador no painel; o telemóvel tem de o introduzir antes de poder escrever as definições do nó.
+* **Sirene e reinícios:** o relé da sirene pertence só ao alarme (nem o broker, nem a central, nem o painel o podem mover, e não abre ao perder o broker); uma zona que ainda não tinha tocado volta a fazer soar a sirene depois do seu tempo; após um reinício voltam um alarme de fumo ou pânico com o sistema desarmado, um alarme silenciado e um bloqueio; um reset à mão é recusado com o alarme armado; um sensor Zigbee que nunca fala conta como perdido.
 
 ## 🖼️ Capturas de ecrã
 
@@ -83,10 +84,10 @@ ARMOR-ALARM/
 
 ## 🛠️ Ambiente de desenvolvimento
 
-**Requisitos:** a C++17 compiler for the host tests, the ESP-IDF 5.5 container to build the image, an ESP32-S3 board (PoE Ethernet or Wi-Fi)
+**Requisitos:** a C++17 compiler for the host tests, the ESP-IDF 5.4 container to build the image, an ESP32-S3 board (PoE Ethernet or Wi-Fi)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 521,307 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 477,588 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Veja o [desenho](docs/DESIGN.md), [como a central toma o lugar do servidor](docs/FAILOVER.md) e as [notas de segurança](docs/SAFETY.md).

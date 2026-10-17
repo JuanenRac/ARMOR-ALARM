@@ -397,17 +397,39 @@ static void test_silent_sensor() {
   // hearing it again clears the silence
   node.feed_zigbee("front-door", alarm::ZoneState::kNormal, false, now);
   CHECK(!node.zones()[0].silent && node.zones()[0].state == alarm::ZoneState::kNormal);
-  // while the radio is not ours nothing is judged, and the allowance starts again when it becomes ours
+  // when the radio is the server's the sensors are judged by its feed; the allowance starts again whenever the radio changes hands
   alarm::Runner other(s);
-  other.feed_zigbee("front-door", alarm::ZoneState::kNormal, false, 0);
   other.radio_held(false, 0);
-  other.tick(100 * 60 * 1000);
+  other.feed_zigbee("front-door", alarm::ZoneState::kNormal, false, 0);
+  other.tick(5 * 60 * 1000);
   CHECK(!other.zones()[0].silent);
-  other.radio_held(false, 100 * 60 * 1000); other.radio_held(true, 100 * 60 * 1000);
+  other.tick(11 * 60 * 1000);
+  CHECK(other.zones()[0].silent);                                                           // the feed stopped: lost
+  other.handle_zone_feed("{\"zone\":\"front-door\",\"state\":\"normal\"}", 11 * 60 * 1000);
+  other.radio_held(true, 100 * 60 * 1000);
   other.tick(100 * 60 * 1000 + 5 * 60 * 1000);
   CHECK(!other.zones()[0].silent);
   other.tick(100 * 60 * 1000 + 11 * 60 * 1000);
   CHECK(other.zones()[0].silent);
+  // a sensor that went silent with the system disarmed is looked at when arming: refused, or left out when forced, and it does not raise the alarm in the exit delay
+  alarm::Runner lost(s);
+  lost.radio_held(true, 0);
+  lost.feed_zigbee("front-door", alarm::ZoneState::kNormal, false, 0);
+  lost.tick(11 * 60 * 1000);
+  CHECK(lost.zones()[0].silent && lost.panel().phase() == alarm::Phase::kDisarmed);
+  CHECK(lost.arm(alarm::Mode::kAway, false, 11 * 60 * 1000) == alarm::Refusal::kZonesOpen);
+  CHECK(lost.arm(alarm::Mode::kAway, true, 11 * 60 * 1000) == alarm::Refusal::kNone);
+  for (int i = 1; i <= 30; ++i) lost.tick(11 * 60 * 1000 + i * 100);
+  CHECK(lost.panel().phase() == alarm::Phase::kArmed && !lost.siren());
+  CHECK(lost.disarm("1234", 11 * 60 * 1000 + 4000) == alarm::Refusal::kNone);
+  // a sensor never heard is judged from the moment the node began to listen, and armed it is a tamper
+  alarm::Runner mute(s);
+  mute.radio_held(true, 0);
+  CHECK(mute.arm(alarm::Mode::kAway, false, 0) == alarm::Refusal::kNone);
+  mute.tick(2000);
+  CHECK(mute.panel().phase() == alarm::Phase::kArmed && !mute.zones()[0].silent);
+  mute.tick(11 * 60 * 1000);
+  CHECK(mute.zones()[0].silent && mute.panel().phase() == alarm::Phase::kAlarm);
 }
 
 int main() {

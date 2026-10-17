@@ -29,4 +29,10 @@ alarm::Refusal disarm(const std::string& pin);
 // "" or why the zones are not being read ("adc": the converter could not be set up).
 std::string error();
 
+// True while the panel is armed, counting down or ringing: a reset by hand or from the panel's page is refused then (whoever stands at the node must not be able to wipe the alarm).
+bool guarding();
+
+// Erases what the node keeps of the panel (the saved state and the events), for a factory reset. Nothing is written again afterwards.
+void forget();
+
 }  // namespace armor::manager

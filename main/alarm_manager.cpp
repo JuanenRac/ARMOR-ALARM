@@ -3,7 +3,7 @@
 //
 // What the panel decides (the states of a loop, the delays, the PIN, the siren) is in core/ and is tested on a computer; this file only reads the ADC and the digital pins (the contacts and
 // the buttons: switches to ground, the pins pulled up), gives the runner the clock, puts the
-// siren's level on its relay and talks to the broker. Only ADC1 is used (the converter shared with the Wi-Fi radio is never touched), 0 to about 3.1 V at the pin: a zone's loop must never put
+// siren's level on its relay and talks to the broker. Only ADC1 is used (the converter shared with the Wi-Fi radio is never touched), 0 to about 3.1 V at the pin (a cut wire reads about 3.1 V, so the loop limits stop at 3 V): a zone's loop must never put
 // more than 3.3 V there. A pin that cannot be read says nothing - it is never taken for a tamper, because a fault of the node must not sound the siren.
 #include "alarm_manager.hpp"
 
@@ -24,6 +24,7 @@ extern "C" {
 }
 #include "clock_sync.hpp"
 #include "core/local_zigbee.hpp"
+#include "entropy.hpp"
 #include "mqtt_link.hpp"
 #include "relay_outputs.hpp"
 #include "zigbee_bridge.hpp"
@@ -51,6 +52,9 @@ constexpr char kStateNamespace[] = "alarm_state";
 constexpr char kStateKey[] = "panel";
 std::string g_saved_text;   // what is in flash now
 constexpr char kEventsKey[] = "events";
+bool g_forgotten = false;   // a factory reset has erased the saved state: nothing is saved again before the restart
+std::uint64_t g_last_events_write_ms = 0;
+constexpr std::uint64_t kEventsWriteEveryMs = 30000;
 std::string g_saved_events;   // the events in flash now (the last few that happened while the node had real time, so a restart does not forget what happened)
 
 // The wall-clock second, or 0 while the node has no real time.
@@ -167,12 +171,13 @@ void publish_state_locked(bool force) {
   g_publish(alarm::topic(g_settings.node_id, "state"), g_runner->state_json(stamp_ms(), now));
 }
 
-// The siren is on while the panel says so; the level goes to its relay only when it changes.
+// The siren is on while the panel says so. The relay is the alarm's alone (see relay_outputs::reserve_for_siren) and its pin is made to hold the level on every turn, so a disturbed pin
+// is put back; the log hears of changes only.
 void drive_siren_locked() {
   const bool wanted = g_runner->siren();
+  if (g_siren_relay >= 0) relay_outputs::siren(wanted);
   if (wanted == g_siren_on) return;
   g_siren_on = wanted;
-  if (g_siren_relay >= 0) relay_outputs::set(static_cast<std::size_t>(g_siren_relay), wanted);
   ESP_LOGW(kTag, "the siren is %s", wanted ? "ON" : "off");
 }
 
@@ -245,6 +250,7 @@ void alarm_task(void*) {
     std::array<double, config::kZoneCount> millivolts{};
     std::array<bool, config::kZoneCount> read{};
     if (unit != nullptr) {
+      std::lock_guard<std::mutex> adc_guard(armor::adc_lock());   // nobody else touches the converter while the zones are read (see entropy.cpp)
       for (std::size_t i = 0; i < config::kZoneCount; ++i) {
         if (!g_settings.zones[i].enabled || g_settings.zones[i].is_zigbee() || g_settings.zones[i].is_digital() || !ready[i]) continue;
         const adc_channel_t channel = static_cast<adc_channel_t>(board::adc1_channel(g_settings.zones[i].pin));
@@ -282,11 +288,14 @@ void alarm_task(void*) {
     drive_siren_locked();
     publish_state_locked(false);
     const std::string now_saved = alarm::saved_text(g_runner->saved());
-    if (now_saved != g_saved_text) to_save = now_saved;
+    if (!g_forgotten && now_saved != g_saved_text) to_save = now_saved;
     const std::string now_events = alarm::events_text(g_runner->panel().events());
-    if (!now_events.empty() && now_events != g_saved_events) events_to_save = now_events;
+    // Flash wears with every write: a wrong PIN or a bouncing sensor is written at most every half minute; what changes the state of the house (arming, alarm, disarming, lockout) at once.
+    const std::vector<alarm::Event>& log = g_runner->panel().events();
+    const bool important = !log.empty() && (log.back().kind == alarm::EventKind::kAlarm || log.back().kind == alarm::EventKind::kArmed || log.back().kind == alarm::EventKind::kDisarmed || log.back().kind == alarm::EventKind::kLockedOut);
+    if (!g_forgotten && !now_events.empty() && now_events != g_saved_events && (important || now - g_last_events_write_ms >= kEventsWriteEveryMs)) events_to_save = now_events;
     }
-    if (!events_to_save.empty() && write_events(events_to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_events = events_to_save; }
+    if (!events_to_save.empty() && write_events(events_to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_events = events_to_save; g_last_events_write_ms = now; }
     // flash is written outside the lock: a write can take tens of milliseconds
     if (!to_save.empty()) {
       if (write_saved(to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_text = to_save; }
@@ -313,8 +322,9 @@ void start(const config::Settings& settings, Publish publish) {
     if (read_events(text)) { g_saved_events = text; g_runner->restore_events(alarm::parse_events(text)); }
   }
   g_siren_relay = settings.panel.siren_relay.empty() ? -1 : relay_outputs::index_of(settings.panel.siren_relay);
+  if (g_siren_relay >= 0) relay_outputs::reserve_for_siren(static_cast<std::size_t>(g_siren_relay));
   if (!settings.panel.siren_relay.empty() && g_siren_relay < 0) ESP_LOGE(kTag, "the siren relay \"%s\" is not an enabled relay: there is no siren", settings.panel.siren_relay.c_str());
-  if (settings.zigbee_local.after_s != 0 && settings.zigbee.enabled) {
+  if (settings.zigbee_local.after_s != 0 && (settings.zigbee.enabled || !settings.zigbee.network_host.empty())) {   // the radio on the board or a coordinator on the network
     g_host = std::make_unique<ZigbeeHost>(settings);
     zigbee_bridge::set_local_host(g_host.get(), static_cast<unsigned>(settings.zigbee_local.after_s));
     ESP_LOGI(kTag, "the node takes the Zigbee radio itself after %d s without the server's client", settings.zigbee_local.after_s);
@@ -359,5 +369,19 @@ alarm::Refusal disarm(const std::string& pin) {
 }
 
 std::string error() { std::lock_guard<std::mutex> guard(g_lock); return g_error; }
+
+bool guarding() {
+  std::lock_guard<std::mutex> guard(g_lock);
+  return g_runner && g_runner->panel().phase() != alarm::Phase::kDisarmed;
+}
+
+void forget() {
+  std::lock_guard<std::mutex> guard(g_lock);
+  g_forgotten = true;
+  nvs_handle_t handle;
+  if (nvs_open(kStateNamespace, NVS_READWRITE, &handle) != ESP_OK) return;
+  if (nvs_erase_all(handle) == ESP_OK) nvs_commit(handle);
+  nvs_close(handle);
+}
 
 }  // namespace armor::manager

@@ -99,6 +99,7 @@ class Parser {
     frame.subsystem = static_cast<std::uint8_t>(cmd0 & 0x1F);
     frame.command = cmd1;
     frame.data = std::move(data);
+    if (ready_.size() >= kMaxReady) ready_.erase(ready_.begin());   // a coordinator that talks without anybody listening cannot make the node run out of memory
     ready_.push_back(std::move(frame));
     buffer_.clear();
   }
@@ -106,6 +107,7 @@ class Parser {
   State state_ = State::kSof;
   std::uint8_t length_ = 0;
   std::vector<std::uint8_t> buffer_;
+  static constexpr std::size_t kMaxReady = 64;
   std::vector<Frame> ready_;
   std::uint32_t dropped_ = 0;
 };

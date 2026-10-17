@@ -21,14 +21,14 @@ One analog pin (ADC1, GPIO 1 to 10; the range read is 0 to about 3.1 V) tells fo
 | contact open | Re + Rpar = 6.9 k | about 1.96 V | triggered |
 | a cut wire | nothing | about 3.3 V (reads about 3.1 V) | tamper |
 
-The firmware's default limits (400, 1200 and 2400 mV) fit this circuit; they are settings and the *Zones* page shows what each pin reads, which is how to check the wiring and to choose the limits for other resistors. A smoke detector or a sensor with a dry output uses the same loop with its relay contact in place of the door's.
+The firmware's default limits (400, 1200 and 2400 mV) fit this circuit, but the margin between the closed contact (about 1.05 V) and the first limit (1.2 V) is only about 150 mV, which the tolerance of 5 % resistors and the converter's error can eat: with these resistors set the limits halfway between the states (for example 500, 1500 and 2600 mV), and measure the real values on the *Zones* page before trusting them. The last limit stops at 3000 mV: the converter does not read above about 3.1 V, and a cut wire must read above the last limit to be a tamper. They are settings and the *Zones* page shows what each pin reads, which is how to check the wiring and to choose the limits for other resistors. A smoke detector or a sensor with a dry output uses the same loop with its relay contact in place of the door's.
 
 - **Never put more than 3.3 V on a pin.** The series resistor, the capacitor and the clamp diodes (for example a BAT54S) protect the pin from what a long cable picks up. Keep the cable away from mains.
 - **Pins:** the zones use the analog pins of the base board (GPIO 1, 2, 4, 5, 6 and 7 by default); the relay pins are free for the siren and other outputs, or - populated as inputs instead - for a tamper switch on the box or the buttons of a keypad.
 
 ## The siren
 
-A relay of the base board (any of the eight, named in the panel) closes while the alarm sounds. The siren's own supply is the installer's (a 12 V siren from a battery that is kept charged); the relay's driver and contacts must be rated for it, with a flyback diode on an inductive load. Every relay starts open when the node starts, so a restart never sounds the siren.
+A relay of the base board (any of the eight, named in the panel) closes while the alarm sounds. The siren's own supply is the installer's (a 12 V siren from a battery that is kept charged); the relay's driver and contacts must be rated for it, with a flyback diode on an inductive load. Every relay starts open when the node starts; an alarm that was ringing when the node restarted rings again (see [SAFETY.md](SAFETY.md)), unless its siren had already timed out. The siren's relay belongs to the alarm: the panel's page, the broker and the central cannot move it, it does not fall back to open when the broker is lost, and its pin is written again on every turn of the loop.
 
 ## Power
 

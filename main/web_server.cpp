@@ -2,7 +2,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // One dispatcher serves /api/v1/*: it checks the session, reads a bounded body, calls the handler for the method and path and answers
-// JSON. Errors are short codes ({"error":"invalid"}), never sentences: the panel translates them into the seven languages.
+// JSON. Errors are short codes ({"error":"invalid"}), never sentences: the panel translates them into the eight languages.
 // The panel itself (index.html, app.js, style.css) is embedded compressed in the firmware, so an update of the firmware updates it too.
 #include "web_server.hpp"
 
@@ -88,9 +88,11 @@ const char* status_line(int code) {
     case 401: return "401 Unauthorized";
     case 403: return "403 Forbidden";
     case 404: return "404 Not Found";
+    case 408: return "408 Request Timeout";
     case 409: return "409 Conflict";
     case 413: return "413 Payload Too Large";
     case 422: return "422 Unprocessable Entity";
+    case 423: return "423 Locked";
     case 429: return "429 Too Many Requests";
     case 500: return "500 Internal Server Error";
     case 503: return "503 Service Unavailable";
@@ -513,6 +515,7 @@ esp_err_t post_remote_relay(httpd_req_t* r) {
   switch (relay_outputs::command_direct(request.relay, request.action, now_on)) {
     case relay_outputs::Outcome::kOk: return send_json(r, 200, central::relay_answer(request.relay, now_on));
     case relay_outputs::Outcome::kUnknownRelay: return send_error(r, 404, "unknown_relay");
+    case relay_outputs::Outcome::kReserved: return send_error(r, 409, "siren_relay");
     default: return send_error(r, 422, "invalid");
   }
 }
@@ -550,13 +553,14 @@ const char* result_code(auth::Result result) {
     case auth::Result::kTooMany: return "too_many_users";
     case auth::Result::kLastAdmin: return "last_admin";
     case auth::Result::kWrongPassword: return "wrong_password";
+    case auth::Result::kStorage: return "storage";
   }
   return "error";
 }
 
 esp_err_t answer_user_result(httpd_req_t* r, auth::Result result) {
   if (result == auth::Result::kOk) return send_ok(r);
-  return send_error(r, result == auth::Result::kNotFound ? 404 : (result == auth::Result::kExists || result == auth::Result::kLastAdmin) ? 409 : 422, result_code(result));
+  return send_error(r, result == auth::Result::kStorage ? 500 : result == auth::Result::kNotFound ? 404 : (result == auth::Result::kExists || result == auth::Result::kLastAdmin) ? 409 : 422, result_code(result));
 }
 
 esp_err_t get_users(httpd_req_t* r) {
@@ -679,7 +683,9 @@ esp_err_t post_factory_reset(httpd_req_t* r) {
   json::Value in;
   if (!read_json(r, in)) return ESP_OK;
   if (in.string_or("confirm", "") != "RESET") return send_error(r, 422, "confirm_required");
+  if (manager::guarding()) return send_error(r, 409, "armed");   // an armed or ringing alarm is disarmed first
   ESP_LOGW(kTag, "factory reset requested by \"%s\"", who.user.c_str());
+  manager::forget();
   if (!store::factory_reset()) return send_error(r, 500, "storage");
   restart_after(1500);
   return send_ok(r, true);

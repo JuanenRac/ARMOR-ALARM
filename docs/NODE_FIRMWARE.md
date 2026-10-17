@@ -12,7 +12,7 @@ It has the web panel of every other node (set-up, login, users, Wi-Fi, broker, u
 - `core/alarm_runner.hpp`: what the node does on every turn - the readings go in, the panel's state and the siren come out.
 - `main/alarm_manager.cpp`: the task that reads the ADC (ADC1 only), feeds the runner, drives the siren, publishes and listens for commands.
 - `main/web_server.cpp`, `main/api_shared.cpp`, `panel/`: the panel's server and pages.
-- `main/zigbee_bridge.cpp`, `main/relay_outputs.cpp`: the radio's bridge and the relays, the same files as the electrical node's.
+- `main/relay_outputs.cpp`: the relays, the same file as the electrical node's (the siren's relay is reserved to the alarm). `main/zigbee_bridge.cpp` is this project's own: it also lends the radio to the node itself and talks to a coordinator on the network.
 
 ## What it does and does not do
 

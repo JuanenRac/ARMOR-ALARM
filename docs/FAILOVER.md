@@ -6,7 +6,7 @@
 |---|---|
 | Everything works | ARMOR-SERVER, with Zigbee2MQTT. The radio's node is a cable. |
 | The server, or the network to it, is down; the nodes are up | The panel (this project), with its own copy of the alarm's settings |
-| The server is back | The server again; the panel hands the radio back and delivers what it logged |
+| The server is back | The server again; the panel hands the radio back (what it logged stays in its own log: the server does not collect it yet) |
 | The radio's node or the radio is down | Nobody, unless there is a second radio (a possible later addition) |
 
 ## The topology
@@ -27,11 +27,11 @@ Once it has the radio the panel talks to the Zigbee coordinator itself. It needs
 
 ## The panel's copy of the settings
 
-Without the server the panel needs to know which sensor is which zone, the delays, the PIN, which zones are always-zones and which siren sounds. The server sends this each time it changes and the panel keeps it in flash.
+Without the server the panel needs to know which sensor is which zone, the delays, the PIN, which zones are always-zones and which siren sounds. Today the panel has its own copy, set in its own page (and by the server's Alarm Designer through the node's API); the server does not yet push the settings by itself each time they change - that is a proposal.
 
 ## How the panel and the nodes talk without the server
 
-If the server also hosts the broker, the broker is away too. The proposal is a direct, authenticated HTTP API between the panel and each node: the wired zones go up to the panel, the siren and relay commands go down to the node. The relays' side of this exists: the base board's relays can be moved remotely (off by default, three independent switches) and fall back to open when the link is lost. The HTTP API itself, and the panel, are not written.
+If the server also hosts the broker, the broker is away too. The proposal is a direct, authenticated HTTP API between the panel and each node: the wired zones go up to the panel, the siren and relay commands go down to the node. The node's side of this exists: a direct HTTP API with a token (`/api/v1/remote/state`, `/relay` and `/alarm`) reads the zones, moves the relays that are not the siren's and arms and disarms the panel with the same rules as its page, and the base board's relays can be moved by the broker (off by default, three independent switches) and fall back to open when the link is lost - except the siren's relay, which only the alarm moves. What is not written is the separate panel that would use that API when the broker is away too.
 
 ## Power
 

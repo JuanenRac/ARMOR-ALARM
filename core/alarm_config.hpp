@@ -139,9 +139,9 @@ inline void read_settings(const json::Value& document, Settings& s, Problems& pr
     }
   }
   if (const json::Value* loop = document.get("loop"); loop != nullptr && loop->is_object()) {
-    read_double(*loop, "short_below_mv", s.loop.short_below_mv, 0.0, 3300.0, "loop.short_below_mv", problems);
-    read_double(*loop, "normal_below_mv", s.loop.normal_below_mv, 0.0, 3300.0, "loop.normal_below_mv", problems);
-    read_double(*loop, "triggered_below_mv", s.loop.triggered_below_mv, 0.0, 3300.0, "loop.triggered_below_mv", problems);
+    read_double(*loop, "short_below_mv", s.loop.short_below_mv, 0.0, 3000.0, "loop.short_below_mv", problems);
+    read_double(*loop, "normal_below_mv", s.loop.normal_below_mv, 0.0, 3000.0, "loop.normal_below_mv", problems);
+    read_double(*loop, "triggered_below_mv", s.loop.triggered_below_mv, 0.0, 3000.0, "loop.triggered_below_mv", problems);
   }
   if (const json::Value* panel = document.get("panel"); panel != nullptr && panel->is_object()) {
     alarm::Timing& t = s.panel.timing;
