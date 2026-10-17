@@ -4,8 +4,8 @@ All notable changes to this project are documented here.
 
 ## [0.3.3] - A zone that cannot be read is in trouble, not closed
 
-A wired zone whose converter does not start or whose loop gives no reading for five rounds in a row is in the new trouble state: it is not guarding, it never sounds the siren, it stops an arming (unless forced, and then it is left out and noted) and the server warns. Before, such a zone stayed normal for ever.
-The panel message and its documentation describe the fourth zone state.
+- A wired zone whose converter does not start or whose loop gives no reading for five rounds in a row is in the new trouble state: it is not guarding, it never sounds the siren, it stops an arming (unless forced, and then it is left out and noted) and the server warns. Before, such a zone stayed normal for ever.
+- The panel message and its documentation describe the fourth zone state.
 
 ## [0.3.2] - Only the house may use the panel, wrong passwords counted per person, and a panel that works behind the server's proxy
 
