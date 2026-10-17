@@ -4,12 +4,12 @@
 // The panel is a state machine fed with the state of each zone and with the requests of whoever is at the keypad (or of the server):
 //   disarmed -> arm(away | stay) -> exit delay -> armed -> (a zone) -> alarm            ...or armed -> (an entry zone) -> entry delay -> alarm if nobody disarms in time
 // Rules worth knowing:
-//   - Arming needs no PIN (anyone may leave); DISARMING does, and so does silencing an alarm. Wrong PINs are counted: after `lockout_after` of them in a row disarming is refused for
+//   - Arming needs no PIN (anyone may leave); DISARMING does, and so does silencing the siren. Wrong PINs are counted: after `lockout_after` of them in a row disarming is refused for
 //     `lockout_s` seconds, even the right PIN.
 //   - Arming is refused while a zone that matters in that mode is open or tampered with, unless `force` is given: the open zones are then left out until the system is disarmed (an
 //     always-zone, smoke or panic, that is sounding can never be left out).
 //   - During the exit delay only an always-zone or a tamper raises the alarm: the person leaving is not an intruder.
-//   - The alarm LATCHES: only a correct disarm ends it. The siren stops by itself after `siren_max_s` (the alarm stays latched, the neighbours do not have to put up with it); a zone that
+//   - The alarm LATCHES: only a correct disarm ends it. A correct PIN can also silence the siren at once with the system still armed (the alarm stays latched and recorded). The siren stops by itself after `siren_max_s` (the alarm stays latched, the neighbours do not have to put up with it); a zone that
 //     has not sounded in this alarm yet sounds it again, at most three times.
 //   - A zone raises the alarm when it CHANGES to triggered (or tamper), not while it stays so: a smoke detector that is still sounding when you disarm does not restart the alarm until it
 //     has been quiet and sounds again. At the moment of arming the zones are looked at as they are (see above).
@@ -28,7 +28,7 @@ namespace armor::alarm {
 enum class Mode { kDisarmed, kAway, kStay };
 enum class Phase { kDisarmed, kExitDelay, kArmed, kEntryDelay, kAlarm };
 enum class Refusal { kNone, kNotDisarmed, kZonesOpen, kBadPin, kLockedOut, kNotArmed };
-enum class EventKind { kArmed, kExitDelayStarted, kEntryDelayStarted, kAlarm, kSirenTimedOut, kDisarmed, kBadPin, kLockedOut, kZoneBypassed };
+enum class EventKind { kArmed, kExitDelayStarted, kEntryDelayStarted, kAlarm, kSirenTimedOut, kDisarmed, kBadPin, kLockedOut, kZoneBypassed, kSirenSilenced };
 
 struct Timing {
   std::uint32_t exit_delay_s = 30;
@@ -120,24 +120,10 @@ class Panel {
     return Refusal::kNone;
   }
 
-  // Ends the armed state or silences an alarm. Needs the PIN.
+  // Ends the armed state or an alarm. Needs the PIN.
   Refusal disarm(const std::string& pin, std::uint64_t now_ms) {
-    if (locked_out(now_ms)) return Refusal::kLockedOut;
-    if (!pin_matches(pin)) {
-      note(now_ms, EventKind::kBadPin, "");
-      if (++wrong_pins_ >= timing_.lockout_after) {
-        // Each lockout without a right PIN in between lasts longer: once, five times and fifteen times `lockout_s` (a fixed minute let somebody try three PINs a minute for ever).
-        static constexpr std::uint32_t kGrowth[3] = {1, 5, 15};
-        const std::uint32_t factor = kGrowth[lockouts_ < 2 ? lockouts_ : 2];
-        if (lockouts_ < 2) ++lockouts_;
-        locked_until_ms_ = now_ms + static_cast<std::uint64_t>(timing_.lockout_s) * factor * 1000ULL;
-        wrong_pins_ = 0;
-        note(now_ms, EventKind::kLockedOut, "");
-      }
-      return Refusal::kBadPin;
-    }
-    wrong_pins_ = 0;
-    lockouts_ = 0;
+    const Refusal pin_result = check_pin(pin, now_ms);
+    if (pin_result != Refusal::kNone) return pin_result;
     if (phase_ == Phase::kDisarmed) return Refusal::kNone;
     phase_ = Phase::kDisarmed;
     mode_ = Mode::kDisarmed;
@@ -147,6 +133,20 @@ class Panel {
     for (Slot& s : slots_) s.bypassed = false;
     note(now_ms, EventKind::kDisarmed, "");
     return Refusal::kNone;
+  }
+
+  // Stops the siren at once with the system still armed: the alarm stays latched and recorded, and a zone that has not sounded in it yet may sound the siren again. Needs the PIN, and a
+  // wrong one counts toward the lockout exactly like a wrong disarm PIN. Without a ringing alarm there is nothing to silence (kNotArmed); a siren already quiet stays so.
+  Refusal silence(const std::string& pin, std::uint64_t now_ms) {
+    const Refusal pin_result = check_pin(pin, now_ms);
+    if (pin_result != Refusal::kNone) return pin_result;
+    return silence_now(now_ms);
+  }
+
+  // The same on the SERVER's say-so (see disarm_authorized): no PIN, not held back by a lockout.
+  Refusal silence_authorized(std::uint64_t now_ms) {
+    wrong_pins_ = 0;
+    return silence_now(now_ms);
   }
 
   // Ends the armed state or an alarm on the SERVER's say-so (a command that came over the broker, which the node accepted only because both its own setting and the broker's access list allow
@@ -254,6 +254,35 @@ class Panel {
     note(now_ms, EventKind::kArmed, "");
     // a zone that was already triggered when the delay ended (and was not left out) raises its alarm now, as it would have had it changed a moment later
     for (Slot& s : slots_) if (!s.bypassed && s.state != ZoneState::kNormal && s.state != ZoneState::kTrouble) react(s, now_ms);
+  }
+
+  // The PIN rules shared by disarming and silencing: a lockout refuses even the right PIN, wrong PINs are counted, a right one clears the count.
+  Refusal check_pin(const std::string& pin, std::uint64_t now_ms) {
+    if (locked_out(now_ms)) return Refusal::kLockedOut;
+    if (!pin_matches(pin)) {
+      note(now_ms, EventKind::kBadPin, "");
+      if (++wrong_pins_ >= timing_.lockout_after) {
+        // Each lockout without a right PIN in between lasts longer: once, five times and fifteen times `lockout_s` (a fixed minute let somebody try three PINs a minute for ever).
+        static constexpr std::uint32_t kGrowth[3] = {1, 5, 15};
+        const std::uint32_t factor = kGrowth[lockouts_ < 2 ? lockouts_ : 2];
+        if (lockouts_ < 2) ++lockouts_;
+        locked_until_ms_ = now_ms + static_cast<std::uint64_t>(timing_.lockout_s) * factor * 1000ULL;
+        wrong_pins_ = 0;
+        note(now_ms, EventKind::kLockedOut, "");
+      }
+      return Refusal::kBadPin;
+    }
+    wrong_pins_ = 0;
+    lockouts_ = 0;
+    return Refusal::kNone;
+  }
+
+  Refusal silence_now(std::uint64_t now_ms) {
+    if (phase_ != Phase::kAlarm) return Refusal::kNotArmed;
+    if (!siren_on_) return Refusal::kNone;
+    siren_on_ = false;
+    note(now_ms, EventKind::kSirenSilenced, "");
+    return Refusal::kNone;
   }
 
   void raise(std::uint64_t now_ms, const std::string& zone) {

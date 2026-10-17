@@ -2,7 +2,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 //   armor/alarm/<node>/state     one message per node, every few seconds and at every change; JSON, no retained flag. What the panel is doing: its phase and mode, the siren, each zone and the last events.
-//   armor/alarm/<node>/command   server -> node: arm (away or stay) or disarm. Only read when the node's setting `server.commands` and the broker's access list both allow it.
+//   armor/alarm/<node>/command   server -> node: arm (away or stay), disarm or silence the siren. Only read when the node's setting `server.commands` and the broker's access list both allow it.
 //   armor/alarm/<node>/result    node -> server: whether the command was accepted and why not; never retained.
 // `node_id`, a zone id and a command id follow the rules of the whole of A.R.M.O.R.; a field that is not in the contract is refused, and a command that is not the contract's gets no answer at all.
 // Nothing here touches hardware; it is tested on a computer and checked against ARMOR-COMMON's shared contract.
@@ -27,7 +27,7 @@ inline const char* event_text(EventKind k) {
   switch (k) {
     case EventKind::kArmed: return "armed"; case EventKind::kExitDelayStarted: return "exit_delay_started"; case EventKind::kEntryDelayStarted: return "entry_delay_started";
     case EventKind::kAlarm: return "alarm"; case EventKind::kSirenTimedOut: return "siren_timed_out"; case EventKind::kDisarmed: return "disarmed";
-    case EventKind::kBadPin: return "bad_pin"; case EventKind::kLockedOut: return "locked_out"; case EventKind::kZoneBypassed: return "zone_bypassed";
+    case EventKind::kBadPin: return "bad_pin"; case EventKind::kLockedOut: return "locked_out"; case EventKind::kZoneBypassed: return "zone_bypassed"; case EventKind::kSirenSilenced: return "siren_silenced";
   }
   return "armed";
 }
@@ -122,7 +122,7 @@ inline std::vector<Event> parse_events(const std::string& text) {
 
 // ---- the command and its answer -----------------------------------------------------------------------------------------------------
 
-enum class Action { kArm, kDisarm };
+enum class Action { kArm, kDisarm, kSilence };
 
 struct Command {
   std::string command_id;   // 16 lowercase hex digits
@@ -162,6 +162,9 @@ inline bool parse_command(const std::string& text, const std::string& node_id, C
   } else if (action == "disarm") {
     command.action = Action::kDisarm;
     if (mode != nullptr || command.force) return false;   // a disarm has nothing to say about a mode or about force
+  } else if (action == "silence") {
+    command.action = Action::kSilence;
+    if (mode != nullptr || command.force) return false;   // a silence has nothing to say about a mode or about force
   } else return false;
   out = command;
   return true;
@@ -198,7 +201,7 @@ inline bool parse_zone_feed(const std::string& text, ZoneFeed& out) {
 inline std::string result_json(const std::string& node_id, std::uint64_t timestamp_ms, const Command& command, Refusal refusal, Phase phase) {
   json::Writer w;
   w.begin_object().field("kind", "alarm_result").field("node_id", node_id).key("timestamp_ms").integer(static_cast<long long>(timestamp_ms));
-  w.field("command_id", command.command_id).field("action", command.action == Action::kArm ? "arm" : "disarm").field("accepted", refusal == Refusal::kNone).field("refusal", refusal_text(refusal)).field("phase", phase_text(phase));
+  w.field("command_id", command.command_id).field("action", command.action == Action::kArm ? "arm" : command.action == Action::kSilence ? "silence" : "disarm").field("accepted", refusal == Refusal::kNone).field("refusal", refusal_text(refusal)).field("phase", phase_text(phase));
   w.end_object();
   return w.str();
 }

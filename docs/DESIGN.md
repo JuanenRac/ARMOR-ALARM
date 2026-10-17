@@ -30,7 +30,7 @@ A wired loop gives four states on one pin: below `short_below` the loop is short
 - Arming needs no PIN; disarming and silencing do. After a few wrong PINs everything is refused for a while, even the right PIN.
 - Arming is refused while a zone that matters in that mode is open or tampered with, unless forced; the open zones are then left out until the disarm. A sounding always-zone is never left out.
 - During the exit delay only an always-zone or a tamper alarms.
-- The alarm latches until a correct disarm; the siren stops by itself after a time.
+- The alarm latches until a correct disarm; the siren stops by itself after a time, or at once when a correct PIN silences it (the system stays armed and the alarm stays recorded).
 - A zone alarms when it **changes** to triggered, not while it stays so.
 
 ## What is still to do

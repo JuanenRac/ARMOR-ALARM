@@ -25,6 +25,8 @@ std::array<alarm::ZoneView, config::kZoneCount> zones();
 // From the panel's page: arming needs no PIN, disarming does.
 alarm::Refusal arm(alarm::Mode mode, bool force);
 alarm::Refusal disarm(const std::string& pin);
+// Stops the siren with the system still armed: needs the PIN as well (a wrong one counts toward the lockout like a wrong disarm PIN).
+alarm::Refusal silence(const std::string& pin);
 
 // "" or why the zones are not being read ("adc": the converter could not be set up).
 std::string error();

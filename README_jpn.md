@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-477%2C588-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.3.3-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.3.4-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,7 +36,7 @@
 
 | | |
 |---|---|
-| バージョン | `0.3.3` |
+| バージョン | `0.3.4` |
 | 成熟度 | 機能する |
 | テスト | 477,665 checks in 6 programs (`ctest`) |
 | 技術 | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
@@ -48,6 +48,7 @@
 * **配線ループ：** 終端抵抗付きの接点を電圧として読み、1 本のピンで 4 つの状態 - 正常、作動、そして配線のショートや断線による改ざん - を得ます。しきい値は設定で、チャタリング除去により、バウンドする接点が警報を鳴らすことはありません。
 * **警報盤：** *外出*と*在宅*の警戒セット、出て行く人を侵入者扱いしない退出遅延、進入遅延、正しい解除まで**保持される警報**、一定時間で自動的に止まるサイレン、強制時に開いている区域をバイパス（鳴っている煙感知器は決してバイパスしません）、そして直近 100 件のイベントログ。
 * **PIN：** 警戒セットには不要、解除と消音には必要です。誤った PIN は数えられ、数回で一定時間すべて拒否されます（正しい PIN も）。
+* **解除せずにサイレンを止める：** サイレンが鳴っている間、正しい PIN で警戒を保ったままサイレンをすぐ止められます - 警報はラッチされたまま記録に残り、まだ鳴っていない警戒区域は再びサイレンを鳴らせ、誤った PIN は解除時の誤った PIN と同じようにロックアウトに数えられます。
 * **計画：** 電気ノードの基板上のゲートウェイ（Zigbee 無線、配線区域、サイレン用リレー）。ARMOR-SERVER と連携し、**サーバーが不在でも警戒を続けます**：警報盤が ARMOR-ELECTRICAL の Zigbee ブリッジ経由でサーバーから無線を引き継ぎます。[設計](docs/DESIGN.md)と[引き継ぎ](docs/FAILOVER.md)を参照。
 * **ノード：** ESP32-S3 用ファームウェア（PoE イーサネットまたは Wi-Fi）。最大 8 つの配線区域、リレーに接続したサイレン、全ノード共通の 8 言語の Web パネル、Zigbee2MQTT に貸し出す Zigbee 無線、そしてメッセージ `armor/alarm/<ノード>/state|command|result`。サーバーが警戒セット・解除できるのは、独立した 3 つのスイッチがすべて許可した場合だけです。[ファームウェア](docs/NODE_FIRMWARE.md)、[メッセージ](docs/ALARM_MESSAGES.md)、[ハードウェア](docs/HARDWARE.md)を参照。
 * **無線の引き継ぎ：** サーバーの Zigbee2MQTT が設定時間いないと、ノードが自分でコーディネーターを起動し（ZNP）、センサーを指定した区域を読み取り（IAS Zone）、Zigbee サイレンを制御し（IAS WD）、クライアントが戻った瞬間に手放します。**まだ：** 実機のコーディネーターやセンサー、ハードウェア、実際の設備でのテスト。

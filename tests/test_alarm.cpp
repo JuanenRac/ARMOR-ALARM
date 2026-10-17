@@ -263,6 +263,42 @@ static void test_siren_times_out() {
   CHECK(p.disarm("1234", 90000) == Refusal::kNone && p.phase() == Phase::kDisarmed);
 }
 
+static void test_silence_keeps_the_alarm() {
+  Panel p(quick(), house(), "1234");
+  CHECK(p.silence("1234", 0) == Refusal::kNotArmed);                       // nothing is ringing
+  p.arm(Mode::kAway, false, 0); p.tick(11000);
+  CHECK(p.silence("1234", 12000) == Refusal::kNotArmed);                   // armed, quiet: nothing to silence
+  p.set_zone("window", ZoneState::kTriggered, 20000);
+  CHECK(p.siren() && p.phase() == Phase::kAlarm);
+  CHECK(p.silence("0000", 21000) == Refusal::kBadPin && p.siren() && has_event(p, EventKind::kBadPin));   // a wrong PIN silences nothing
+  CHECK(p.silence("1234", 22000) == Refusal::kNone);
+  CHECK(!p.siren() && p.phase() == Phase::kAlarm && p.mode() == Mode::kAway && has_event(p, EventKind::kSirenSilenced));   // still armed and latched
+  CHECK(p.saved().phase == Phase::kAlarm && p.saved().silenced);           // a restart does not make it louder
+  const std::size_t events = p.events().size();
+  CHECK(p.silence("1234", 23000) == Refusal::kNone && p.events().size() == events);   // already quiet: nothing new is noted
+  // a zone that has not sounded yet sounds it again, as before
+  p.set_zone("front-door", ZoneState::kTriggered, 30000);
+  CHECK(p.siren() && p.phase() == Phase::kAlarm);
+  CHECK(p.silence("1234", 31000) == Refusal::kNone && !p.siren());
+  CHECK(p.disarm("1234", 32000) == Refusal::kNone && p.phase() == Phase::kDisarmed);
+}
+
+static void test_silence_counts_wrong_pins() {
+  Panel p(quick(), house(), "1234");
+  p.arm(Mode::kAway, false, 0); p.tick(11000);
+  p.set_zone("window", ZoneState::kTriggered, 20000);
+  CHECK(p.silence("1", 21000) == Refusal::kBadPin && p.silence("2", 22000) == Refusal::kBadPin);
+  CHECK(p.disarm("3", 23000) == Refusal::kBadPin && p.locked_out(23000));                  // silence and disarm count together
+  CHECK(p.silence("1234", 24000) == Refusal::kLockedOut && p.siren());                      // locked out, even the right PIN
+  CHECK(p.silence("1234", 23000 + 30000) == Refusal::kNone && !p.siren());
+  // the server's say-so needs no PIN and no lockout to pass
+  Panel q(quick(), house(), "1234");
+  q.arm(Mode::kAway, false, 0); q.tick(11000);
+  q.set_zone("window", ZoneState::kTriggered, 20000);
+  for (int i = 0; i < 3; ++i) q.silence("0", 21000 + i);
+  CHECK(q.locked_out(22000) && q.silence_authorized(22000) == Refusal::kNone && !q.siren() && q.phase() == Phase::kAlarm);
+}
+
 static void test_zero_delays_and_log() {
   Timing t = quick(); t.exit_delay_s = 0; t.entry_delay_s = 0;
   Panel p(t, house(), "1234");
@@ -458,6 +494,8 @@ int main() {
   test_pin_and_lockout();
   test_lockout_grows_until_a_right_pin();
   test_siren_times_out();
+  test_silence_keeps_the_alarm();
+  test_silence_counts_wrong_pins();
   test_zero_delays_and_log();
   test_restart_and_tamper();
   test_resound_and_restore_more();

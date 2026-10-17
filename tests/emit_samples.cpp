@@ -64,6 +64,8 @@ int main() {
   command("\"action\":\"arm\",\"mode\":\"stay\"");                                      // refused: not disarmed
   run(node, now, 300, {kClosed, kOpen, kClosed, kCut});                                 // a smoke loop cut: tamper on an always zone
   state();                                                                              // alarm, siren
+  command("\"action\":\"silence\"");                                                   // accepted: the siren stops, the alarm stays
+  state();                                                                              // alarm, siren quiet
   command("\"action\":\"disarm\"");                                                     // accepted: the server may disarm
   state();
   run(node, now, 1000, quiet);

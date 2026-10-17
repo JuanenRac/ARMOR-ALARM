@@ -186,7 +186,7 @@ void on_command(const std::string&, const std::string& payload) {
   if (!g_runner) return;
   const alarm::Reply reply = g_runner->handle(payload, now_ms());
   if (!reply.understood) { ESP_LOGW(kTag, "a message on the command topic was ignored: it is not the contract's command"); return; }
-  ESP_LOGW(kTag, "the server said %s: %s", reply.command.action == alarm::Action::kArm ? "arm" : "disarm", alarm::refusal_text(reply.refusal));
+  ESP_LOGW(kTag, "the server said %s: %s", reply.command.action == alarm::Action::kArm ? "arm" : reply.command.action == alarm::Action::kSilence ? "silence" : "disarm", alarm::refusal_text(reply.refusal));
   if (g_publish) g_publish(alarm::topic(g_settings.node_id, "result"), g_runner->result_json(stamp_ms(), reply));
   drive_siren_locked();
   publish_state_locked(true);
@@ -295,7 +295,7 @@ void alarm_task(void*) {
     const std::string now_events = alarm::events_text(g_runner->panel().events());
     // Flash wears with every write: a wrong PIN or a bouncing sensor is written at most every half minute; what changes the state of the house (arming, alarm, disarming, lockout) at once.
     const std::vector<alarm::Event>& log = g_runner->panel().events();
-    const bool important = !log.empty() && (log.back().kind == alarm::EventKind::kAlarm || log.back().kind == alarm::EventKind::kArmed || log.back().kind == alarm::EventKind::kDisarmed || log.back().kind == alarm::EventKind::kLockedOut);
+    const bool important = !log.empty() && (log.back().kind == alarm::EventKind::kAlarm || log.back().kind == alarm::EventKind::kArmed || log.back().kind == alarm::EventKind::kDisarmed || log.back().kind == alarm::EventKind::kLockedOut || log.back().kind == alarm::EventKind::kSirenSilenced);
     if (!g_forgotten && !now_events.empty() && now_events != g_saved_events && (important || now - g_last_events_write_ms >= kEventsWriteEveryMs)) events_to_save = now_events;
     }
     if (!events_to_save.empty() && write_events(events_to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_events = events_to_save; g_last_events_write_ms = now; }
@@ -335,7 +335,7 @@ void start(const config::Settings& settings, Publish publish) {
   mqtt_link::subscribe(alarm::topic(settings.node_id, "zigbee"), on_zone_feed);
   if (settings.server.commands) {
     mqtt_link::subscribe(alarm::topic(settings.node_id, "command"), on_command);
-    ESP_LOGI(kTag, "the server may arm and disarm the panel (armor/alarm/%s/command)", settings.node_id.c_str());
+    ESP_LOGI(kTag, "the server may arm, disarm and silence the panel (armor/alarm/%s/command)", settings.node_id.c_str());
   }
   xTaskCreate(alarm_task, "alarm", 6144, nullptr, 5, nullptr);
 }
@@ -366,6 +366,16 @@ alarm::Refusal disarm(const std::string& pin) {
   if (!g_runner) return alarm::Refusal::kNotArmed;
   const alarm::Refusal result = g_runner->disarm(pin, now_ms());
   ESP_LOGW(kTag, "disarm from the panel: %s", alarm::refusal_text(result));
+  drive_siren_locked();
+  publish_state_locked(true);
+  return result;
+}
+
+alarm::Refusal silence(const std::string& pin) {
+  std::lock_guard<std::mutex> guard(g_lock);
+  if (!g_runner) return alarm::Refusal::kNotArmed;
+  const alarm::Refusal result = g_runner->silence(pin, now_ms());
+  ESP_LOGW(kTag, "silence from the panel: %s", alarm::refusal_text(result));
   drive_siren_locked();
   publish_state_locked(true);
   return result;

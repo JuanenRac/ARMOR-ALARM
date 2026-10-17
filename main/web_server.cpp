@@ -510,6 +510,18 @@ esp_err_t post_alarm_disarm(httpd_req_t* r) {
   return send_ok(r);
 }
 
+// Silences the siren and keeps the system armed (the alarm stays latched). The same rules as disarming: a signed-in administrator and the PIN, and a wrong PIN counts toward the lockout.
+esp_err_t post_alarm_silence(httpd_req_t* r) {
+  Who who;
+  if (!require(r, who, true, true)) return ESP_OK;
+  json::Value in;
+  if (!read_json(r, in)) return ESP_OK;
+  const alarm::Refusal result = manager::silence(in.string_or("pin", ""));
+  if (result != alarm::Refusal::kNone) return refuse(r, result);
+  ESP_LOGW(kTag, "siren silenced by \"%s\"", who.user.c_str());
+  return send_ok(r);
+}
+
 // ---- the direct API for a central (core/central_link.hpp) ---------------------------------------------------------------------------
 
 // True when the request carries the node's token and the interface is on; otherwise 401, and the node does not say which of the two it was.
@@ -544,7 +556,7 @@ esp_err_t post_remote_relay(httpd_req_t* r) {
   }
 }
 
-// The central arms or disarms the panel through the node's own API: the same rules as the panel's page (arming needs no PIN, disarming does, and a few wrong PINs lock the panel).
+// The central arms, disarms or silences the panel through the node's own API: the same rules as the panel's page (arming needs no PIN, disarming and silencing do, and a few wrong PINs lock the panel).
 esp_err_t post_remote_alarm(httpd_req_t* r) {
   if (!central_allowed(r)) return ESP_OK;
   json::Value in;
@@ -562,6 +574,12 @@ esp_err_t post_remote_alarm(httpd_req_t* r) {
     const alarm::Refusal result = manager::disarm(in.string_or("pin", ""));
     if (result != alarm::Refusal::kNone) return refuse(r, result);
     ESP_LOGW(kTag, "disarmed by the central");
+    return send_ok(r);
+  }
+  if (action == "silence") {
+    const alarm::Refusal result = manager::silence(in.string_or("pin", ""));
+    if (result != alarm::Refusal::kNone) return refuse(r, result);
+    ESP_LOGW(kTag, "siren silenced by the central");
     return send_ok(r);
   }
   return send_error(r, 422, "invalid");
@@ -919,6 +937,7 @@ esp_err_t api_handler(httpd_req_t* r) {
     if (route == "remote/alarm") return post_remote_alarm(r);
     if (route == "alarm/arm") return post_alarm_arm(r);
     if (route == "alarm/disarm") return post_alarm_disarm(r);
+    if (route == "alarm/silence") return post_alarm_silence(r);
     if (route == "zigbee/radio") return post_zigbee_radio(r);
     if (route.compare(0, 7, "relays/") == 0) return post_relay(r, route.substr(7));
   } else if (method == HTTP_PUT) {

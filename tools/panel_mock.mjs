@@ -220,6 +220,16 @@ const server = createServer(async (request, response) => {
     panelState.wrong = 0; panelState.phase = "disarmed"; panelState.mode = "disarmed"; panelState.siren = false; note("disarmed");
     return json(response, 200, { ok: true, restart_required: false });
   }
+  if (method === "POST" && route === "alarm/silence") {
+    if (!needAdmin()) return;
+    if (Date.now() < panelState.lockedUntil) return json(response, 423, { error: "locked_out" });
+    if (body.pin !== PIN) { note("bad_pin"); if (++panelState.wrong >= config.panel.lockout_after) { panelState.wrong = 0; panelState.lockedUntil = Date.now() + config.panel.lockout_s * 1000; note("locked_out"); } return json(response, 403, { error: "bad_pin" }); }
+    panelState.wrong = 0;
+    tickPanel();
+    if (panelState.phase !== "alarm") return json(response, 409, { error: "refused" });
+    if (panelState.siren) { panelState.siren = false; note("siren_silenced"); }
+    return json(response, 200, { ok: true, restart_required: false });
+  }
   if (method === "POST" && route === "zones/open") {   // a development route: opens or closes a zone of the stand-in
     if (!needAdmin()) return;
     if (body.open) panelState.open.add(body.id); else panelState.open.delete(body.id);

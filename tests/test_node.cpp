@@ -167,6 +167,8 @@ static void test_state_and_commands() {
   CHECK(alarm::parse_command(command("\"action\":\"arm\",\"mode\":\"away\""), "alarm-a1b2c3", c) && c.action == alarm::Action::kArm && c.mode == alarm::Mode::kAway && !c.force && c.command_id == id);
   CHECK(alarm::parse_command(command("\"action\":\"arm\",\"mode\":\"stay\",\"force\":true"), "alarm-a1b2c3", c) && c.mode == alarm::Mode::kStay && c.force);
   CHECK(alarm::parse_command(command("\"action\":\"disarm\""), "alarm-a1b2c3", c) && c.action == alarm::Action::kDisarm);
+  CHECK(alarm::parse_command(command("\"action\":\"silence\""), "alarm-a1b2c3", c) && c.action == alarm::Action::kSilence);
+  CHECK(!alarm::parse_command(command("\"action\":\"silence\",\"mode\":\"away\""), "alarm-a1b2c3", c) && !alarm::parse_command(command("\"action\":\"silence\",\"force\":true"), "alarm-a1b2c3", c));
   // anything that is not the contract's is not a command at all
   for (const std::string& bad : std::vector<std::string>{command("\"action\":\"arm\""), command("\"action\":\"arm\",\"mode\":\"night\""), command("\"action\":\"disarm\",\"mode\":\"away\""), command("\"action\":\"disarm\",\"force\":true"),
                                   command("\"action\":\"open\""), command("\"action\":\"arm\",\"mode\":\"away\",\"pin\":\"1234\""), command("\"action\":\"arm\",\"mode\":\"away\",\"force\":1"), command(""),

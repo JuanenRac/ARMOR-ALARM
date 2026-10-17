@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.4] - Silence the siren with the PIN, without disarming
+
+- A correct PIN now silences a ringing siren at once while the system stays armed: the alarm stays latched and recorded, a zone that has not sounded yet may sound the siren again (the re-sound rules are unchanged), and a wrong PIN counts toward the lockout exactly like a wrong disarm PIN.
+- The panel page has a Silence button next to Disarm (shown while the siren sounds) backed by POST /api/v1/alarm/silence, with the same sign-in, PIN and rate limits as disarm; the central API (remote/alarm) accepts action silence too.
+- The server may send a silence command (armor/alarm/<node>/command, action silence, no mode, no force, no PIN) under the same three switches as arm and disarm; the result echoes action silence.
+- New event kind siren_silenced in the state message and the event list, saved at once to flash so a restart does not make the siren louder; texts, help and docs in the eight languages.
+- Tests: the panel rules (silence, lockout shared with disarm, no-op when quiet, re-sound after a silence), the strict command parser and the shared samples.
+
 ## [0.3.3] - A zone that cannot be read is in trouble, not closed
 
 - A wired zone whose converter does not start or whose loop gives no reading for five rounds in a row is in the new trouble state: it is not guarding, it never sounds the siren, it stops an arming (unless forced, and then it is left out and noted) and the server warns. Before, such a zone stayed normal for ever.
