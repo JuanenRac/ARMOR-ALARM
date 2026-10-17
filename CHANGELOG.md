@@ -18,6 +18,7 @@ All notable changes to this project are documented here.
 - The startup line says *alarm node*, the comments say eight languages and ESP-IDF 5.4 (the one the container builds with), and `secrets/node.conf.example` exists.
 - The documents say what the node does today: the zone feed is believed by the panel, what a restart brings back, the siren's relay, the direct HTTP API, the Bluetooth pairing with its passkey, the loop's margins and the files that differ from the electrical node's.
 - Shared with the other nodes: Improv over USB on a board with a cable now also tells the node to use the Wi-Fi it was given, the upload by hand is refused while an installation or a copy of the slot runs, and the headers of the signature code name the real generator script.
+- The Bluetooth note of the panel no longer calls the pairing *just works*: it says what the pairing asks for and what protects it.
 - Tests: 477,588 checks in six programs plus the panel texts; new ones cover a second alarm after the siren timed out, the restart of a disarmed alarm, of a silenced one and of a lockout, silent and mute Zigbee sensors, and the loop limit.
 - Shared with the other nodes (from ARMOR-COMMON's firmware base): the pairing of Bluetooth closes after repeated failures, the random generator keeps away from the converter, a user write is all-or-nothing, a repeated key in a JSON document is refused and four-number firmware versions are understood.
 
