@@ -133,8 +133,8 @@ Outcome command(const std::string& relay, const std::string& payload) {
   if (!g_bank || !g_settings.remote.relays) return Outcome::kRemoteOff;
   const int index = g_bank->find(relay);
   if (index < 0) { ESP_LOGW(kTag, "a command for \"%s\" was ignored: no such relay", relay.c_str()); return Outcome::kUnknownRelay; }
-  const relays::Action action = relays::parse_command(payload);
-  if (action == relays::Action::kNone) { ESP_LOGW(kTag, "a command for \"%s\" was ignored: not ON, OFF or TOGGLE", relay.c_str()); return Outcome::kNotUnderstood; }
+  const relays::Action action = relays::parse_broker_command(payload);
+  if (action == relays::Action::kNone) { ESP_LOGW(kTag, "a command for \"%s\" was ignored: not ON or OFF (a TOGGLE from the broker is refused: a message can be delivered twice)", relay.c_str()); return Outcome::kNotUnderstood; }
   const std::size_t i = static_cast<std::size_t>(index);
   if (index == g_siren_index) { ESP_LOGW(kTag, "a command for \"%s\" was ignored: it is the siren's relay", relay.c_str()); return Outcome::kReserved; }
   drive(i, action == relays::Action::kToggle ? !g_bank->is_on(i) : action == relays::Action::kOn, "the broker");

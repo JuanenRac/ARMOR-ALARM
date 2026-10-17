@@ -149,6 +149,8 @@ extern "C" void app_main() {
   for (const auto& relay : settings.relays) if (relay.enabled && relay.pin == 0) button_is_a_pin = true;
   for (const auto& zone : settings.zones) if (zone.enabled && zone.pin == 0) button_is_a_pin = true;
   for (const auto& button : settings.buttons) if (button.enabled && button.pin == 0) button_is_a_pin = true;
+#if CONFIG_ARMOR_BOOT_FACTORY_RESET
   if (!button_is_a_pin) xTaskCreate(boot_button_task, "boot-button", 3072, nullptr, 2, nullptr);
+#endif
   xTaskCreate(confirm_firmware_task, "confirm", 3072, panel_ok ? reinterpret_cast<void*>(1) : nullptr, 2, nullptr);
 }

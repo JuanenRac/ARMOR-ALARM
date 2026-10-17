@@ -83,6 +83,11 @@ config ARMOR_MQTT_USERNAME
 config ARMOR_MQTT_PASSWORD
     string "MQTT password"
     default ""
+config ARMOR_BOOT_FACTORY_RESET
+    bool "BOOT button erases the settings (hold it 8 s in the first 30 s after power-up)"
+    default y
+    help
+        Whoever can reach the board can wipe the node's settings and users with the button. Turn it off for a node in a place anyone can open; the reset of the panel (an administrator) stays.
 config ARMOR_NTP_SERVER
     string "NTP server (message timestamps are wall-clock time)"
     default "pool.ntp.org"
