@@ -99,7 +99,7 @@ class Panel {
     if (slot == nullptr) return;
     const ZoneState before = slot->state;
     slot->state = state;
-    if (state != before && state != ZoneState::kNormal) react(*slot, now_ms);
+    if (state != before && state != ZoneState::kNormal && state != ZoneState::kTrouble) react(*slot, now_ms);   // a zone that cannot be read tells nothing: it never sounds
   }
 
   Refusal arm(Mode mode, bool force, std::uint64_t now_ms) {
@@ -253,7 +253,7 @@ class Panel {
     phase_since_ms_ = now_ms;
     note(now_ms, EventKind::kArmed, "");
     // a zone that was already triggered when the delay ended (and was not left out) raises its alarm now, as it would have had it changed a moment later
-    for (Slot& s : slots_) if (!s.bypassed && s.state != ZoneState::kNormal) react(s, now_ms);
+    for (Slot& s : slots_) if (!s.bypassed && s.state != ZoneState::kNormal && s.state != ZoneState::kTrouble) react(s, now_ms);
   }
 
   void raise(std::uint64_t now_ms, const std::string& zone) {

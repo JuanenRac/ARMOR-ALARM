@@ -267,7 +267,10 @@ void alarm_task(void*) {
     {
     std::lock_guard<std::mutex> guard(g_lock);
     g_runner->set_epoch(wall_epoch());
-    for (std::size_t i = 0; i < config::kZoneCount; ++i) if (read[i]) g_runner->feed(i, millivolts[i], now);
+    for (std::size_t i = 0; i < config::kZoneCount; ++i) {
+      if (read[i]) g_runner->feed(i, millivolts[i], now);
+      else if (g_settings.zones[i].enabled && !g_settings.zones[i].is_zigbee() && !g_settings.zones[i].is_digital()) g_runner->feed_unreadable(i, now);   // a loop nobody can read is not a closed one
+    }
     for (std::size_t i = 0; i < config::kZoneCount; ++i) if (digital_ready[i]) g_runner->feed_digital(i, gpio_get_level(static_cast<gpio_num_t>(g_settings.zones[i].pin)) != 0, now);
     bool pressed = false;
     for (std::size_t i = 0; i < config::kButtonCount; ++i) {

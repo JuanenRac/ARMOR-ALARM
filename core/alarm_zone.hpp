@@ -17,7 +17,8 @@ namespace armor::alarm {
 enum class ZoneKind { kInstant, kEntry, kInterior, kAlways };
 
 // What a zone says now. `kTamper` is a cut or shorted loop or a sensor's own tamper switch: it raises the alarm in every state of the system.
-enum class ZoneState { kNormal, kTriggered, kTamper };
+// kTrouble: the node cannot read the zone (its converter or its input does not answer). The zone is not guarding: it never sounds the siren, and it stops an arming unless it is left out.
+enum class ZoneState { kNormal, kTriggered, kTamper, kTrouble };
 
 struct Zone {
   std::string id;               // lowercase letters, digits, - and _ (the rule of the whole of A.R.M.O.R.)
@@ -33,7 +34,7 @@ inline bool parse_kind(const std::string& text, ZoneKind& out) {
   for (ZoneKind k : {ZoneKind::kInstant, ZoneKind::kEntry, ZoneKind::kInterior, ZoneKind::kAlways}) if (text == kind_text(k)) { out = k; return true; }
   return false;
 }
-inline const char* state_text(ZoneState state) { return state == ZoneState::kTriggered ? "triggered" : state == ZoneState::kTamper ? "tamper" : "normal"; }
+inline const char* state_text(ZoneState state) { return state == ZoneState::kTriggered ? "triggered" : state == ZoneState::kTamper ? "tamper" : state == ZoneState::kTrouble ? "trouble" : "normal"; }
 
 inline bool valid_zone_id(const std::string& id) {
   if (id.empty() || id.size() > 32 || id.front() == '-' || id.front() == '_') return false;

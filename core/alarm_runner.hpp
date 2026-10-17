@@ -59,10 +59,24 @@ class Runner {
     if (index >= config::kZoneCount || !views_[index].enabled || views_[index].zigbee || views_[index].digital) return;
     ZoneView& view = views_[index];
     view.has_reading = true;
+    unreadable_[index] = 0;
     view.millivolts = millivolts;
     const ZoneState stable = filters_[index].feed(classify_loop(millivolts, settings_.loop), now_ms);
     view.state = stable;
     panel_.set_zone(view.id, stable, now_ms);
+    view.bypassed = panel_.bypassed(view.id);
+  }
+
+  // The converter or the input of a wired zone gave no reading this round. After kUnreadableRounds rounds in a row the zone is in trouble: it is not guarding and the panel will not arm with it
+  // (unless it is left out), instead of showing a normal zone that nobody is watching. It sounds nothing; a reading that comes back ends the trouble after the zone's own hold time.
+  static constexpr std::uint8_t kUnreadableRounds = 5;
+  void feed_unreadable(std::size_t index, std::uint64_t now_ms) {
+    if (index >= config::kZoneCount || !views_[index].enabled || views_[index].zigbee) return;
+    if (unreadable_[index] < kUnreadableRounds) ++unreadable_[index];
+    if (unreadable_[index] < kUnreadableRounds) return;
+    ZoneView& view = views_[index];
+    view.state = ZoneState::kTrouble;
+    panel_.set_zone(view.id, ZoneState::kTrouble, now_ms);
     view.bypassed = panel_.bypassed(view.id);
   }
 
@@ -72,6 +86,7 @@ class Runner {
     ZoneView& view = views_[index];
     const config::ZoneSetting& zone = settings_.zones[index];
     view.has_reading = true;
+    unreadable_[index] = 0;
     view.pin_high = pin_high;
     const ZoneState stable = filters_[index].feed(classify_contact(pin_high, zone.contact != "no", zone.role == "tamper"), now_ms);
     view.state = stable;
@@ -214,6 +229,7 @@ class Runner {
   Panel panel_;
   std::array<ZoneView, config::kZoneCount> views_;
   std::array<Debouncer, config::kZoneCount> filters_;
+  std::array<std::uint8_t, config::kZoneCount> unreadable_{};
   std::array<ButtonFilter, config::kButtonCount> buttons_;
 };
 

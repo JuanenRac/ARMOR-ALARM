@@ -14,7 +14,7 @@ One message per node, every five seconds and at every change (the phase, the mod
 ```
 
 - `phase`: `disarmed`, `exit_delay`, `armed`, `entry_delay` or `alarm`. `mode`: `disarmed`, `away` or `stay`.
-- A zone's `kind` is `instant`, `entry`, `interior` or `always`; its `state` is `normal`, `triggered` or `tamper`; `bypassed` is true while it is left out of this arming.
+- A zone's `kind` is `instant`, `entry`, `interior` or `always`; its `state` is `normal`, `triggered`, `tamper` or `trouble`; `bypassed` is true while it is left out of this arming. `trouble` means that the node cannot read the zone (its converter or input gave no reading for five rounds in a row): the zone is not guarding, it never sounds the siren, it stops an arming like an open zone (and can be left out by forcing it) and the server shows a warning for as long as it lasts.
 - `open_zones` are the zones that would stop an arming right now. `events` are the last ten things that happened, oldest first, told as seconds ago (a node may have no clock); an event's `kind` is `armed`, `exit_delay_started`, `entry_delay_started`, `alarm`, `siren_timed_out`, `disarmed`, `bad_pin`, `locked_out` or `zone_bypassed`, with the `zone` that caused it when one did.
 - `commands_enabled` says whether the node accepts the commands below at all (the setting `server.commands`).
 - A field that is not in the schema is refused. The message carries a state and never a command.

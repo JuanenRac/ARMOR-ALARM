@@ -173,6 +173,16 @@ static void test_always_zones_and_tamper() {
   Panel t(quick(), house(), "1234");
   t.set_zone("hall-motion", ZoneState::kTamper, 1000);
   CHECK(t.phase() == Phase::kAlarm && t.events().back().zone == "hall-motion");
+  // a zone that cannot be read never sounds, stops an arming, and can be left out like any other open zone
+  Panel u(quick(), house(), "1234");
+  u.set_zone("hall-motion", ZoneState::kTrouble, 100);
+  CHECK(u.phase() == Phase::kDisarmed && u.zone_state("hall-motion") == ZoneState::kTrouble);
+  CHECK(std::string(state_text(ZoneState::kTrouble)) == "trouble");
+  CHECK(u.arm(Mode::kAway, false, 200) == Refusal::kZonesOpen);
+  CHECK(u.arm(Mode::kAway, true, 300) == Refusal::kNone);       // forced: the zone is left out and the arming says so
+  u.tick(300 + 120000);
+  u.set_zone("hall-motion", ZoneState::kTrouble, 500000);
+  CHECK(u.phase() != Phase::kAlarm);
   // an always-zone sounding cannot be armed over, forced or not
   Panel s(quick(), house(), "1234");
   s.set_zone("smoke", ZoneState::kTriggered, 0);

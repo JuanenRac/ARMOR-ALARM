@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.3] - A zone that cannot be read is in trouble, not closed
+
+A wired zone whose converter does not start or whose loop gives no reading for five rounds in a row is in the new trouble state: it is not guarding, it never sounds the siren, it stops an arming (unless forced, and then it is left out and noted) and the server warns. Before, such a zone stayed normal for ever.
+The panel message and its documentation describe the fourth zone state.
+
 ## [0.3.2] - Only the house may use the panel, wrong passwords counted per person, and a panel that works behind the server's proxy
 
 - **The panel answers only the house.** A new setting, *Networks that may use this panel* (`web.admin_sources`), says which addresses may sign in or change anything: empty means the private ranges of a house (10/8, 172.16/12, 192.168/16, link-local, loopback and 100.64/10, where Tailscale lives), otherwise the list of addresses and networks you write (`192.168.1.0/24, 10.66.0.0/24`). Any other address is told `outside_network`, except the public look at the node's identity, so a port opened by mistake on the router does not let the Internet try passwords here. A list that would shut out the person who is saving it is refused (`would_lock_out`).
