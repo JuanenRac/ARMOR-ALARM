@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.6] - Arming profiles and the health report
+
+- An arm command may carry an arming profile (Away, Home, Night or the owner's own) that chooses for that arming which zones guard, which alarm at once or after the entry delay, the exit and entry delays and whether the siren sounds (a silent alarm is still latched, recorded and told). Smoke, panic and tamper, the PIN, the lockout, the silence, a forced arming and zones in trouble are untouched; an arm without a profile behaves exactly as before.
+- The profile in use is in the state message (profile, with arm_profiles: true saying the node understands them) and is kept in flash so that a restart arms the house the same way.
+- core/arm_profile.hpp reads a profile strictly as the contract has it; tests/test_profiles.cpp covers the parser, the zone resolution, the siren rules, a restart and the command, and runs the same random scenario with and without a neutral profile to prove nothing changed. emit_samples and check_samples put a profile command and its state through the shared contract.
+- Every node publishes a health report about once a minute to armor/health/<node> (the node_health contract): uptime, why it last restarted, free and least free heap, the link and Wi-Fi signal, how many times it connected to the broker, tasks short of stack and the last error it logged.
+- The report is built by core/node_health.hpp and main/node_health.cpp, shared by the five nodes through ARMOR-COMMON's firmware base; its decisions are covered by the host tests of tests/test_base.cpp. It has not run on a board.
+- The broker link counts its connections for the report.
+
 ## [0.3.5] - An optional encrypted link to the broker (TLS)
 
 - New settings mqtt.tls (off by default) and mqtt.ca_pem (one certificate in PEM, at most 2 KB; anything else is refused). With TLS on, the node connects with mqtts://, trusts only that authority and checks that the broker's certificate was made for the address it reached; it waits for its clock first (up to two minutes), because certificates have dates. With the switch off nothing changes: the node talks plain MQTT as before.

@@ -81,5 +81,16 @@ int main() {
   node.tick(now);
   node.disarm("1234", now);
   state();
+  // an arm with an arming profile: the window is left out, the hall's motion guards in "stay", the entry door alarms at once and the siren is silent
+  run(node, now, 1000, quiet);
+  command("\"action\":\"arm\",\"mode\":\"stay\",\"profile\":{\"id\":\"night\",\"name\":\"Night\",\"base\":\"stay\",\"entry_delay_s\":20,\"siren\":false,\"notify\":\"normal\","
+          "\"zones\":[{\"id\":\"hall-motion\",\"armed\":true},{\"id\":\"window\",\"armed\":false},{\"id\":\"front-door\",\"delay\":\"instant\"}]}");
+  state();                                                                              // exit delay, the profile named
+  run(node, now, 11000, quiet);
+  state();                                                                              // armed with the profile
+  run(node, now, 300, {kClosed, kClosed, kOpen, kClosed});                              // the hall's motion: a silent alarm
+  state();
+  command("\"action\":\"disarm\"");
+  state();                                                                              // the profile is gone with the disarm
   return 0;
 }

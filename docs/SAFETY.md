@@ -10,3 +10,7 @@
 - **A zone that cannot be read is not shown as closed.** If the converter does not start or a loop gives no reading for five rounds in a row, the zone is in `trouble`: the panel will not arm with it unless it is forced (and then the zone is left out and noted), and the server warns. Before this, such a zone stayed "normal" for ever and the house looked protected.
 - **A reset by hand is refused while the alarm is armed.** Holding the BOOT button at power-up (or the factory reset of the panel's page) wipes the settings and the users only when the panel is disarmed; the saved state of the alarm is wiped with them. Whoever can open the box can still cut the power: use a box with a tamper switch and a siren with its own battery.
 - **When the server is away** the panel decides alone. If the panel or the radio's node is also down, nobody guards: plan the power and, if it matters, a second radio.
+
+## Arming profiles
+
+A profile (see ALARM_MESSAGES.md) can make an intrusion silent and can leave zones out of one arming. It cannot make the house less safe in the ways this page promises: smoke, panic and tamper zones always guard and always sound, a tamper on a zone the profile leaves out still raises the alarm, the PIN and the lockout are the same, a zone in trouble still stops an arming, and a sounding always-zone is never left out by a forced arming. A silent profile is the owner's choice for a situation they know (a night in, a duress rehearsal); it is told to the server like any alarm. Nothing here has run on a real installation.

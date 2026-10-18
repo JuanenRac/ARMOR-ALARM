@@ -31,6 +31,7 @@ def main() -> int:
     phases = set()
     refusals = set()
     sent = []
+    profiled = False
     for line in sys.stdin.read().splitlines():
         topic, _, body = line.partition(" ")
         leaf = topic.rsplit("/", 1)[-1]
@@ -43,6 +44,8 @@ def main() -> int:
         counts[leaf] += 1
         if leaf == "state":
             phases.add(payload["phase"])
+            if payload.get("profile") == "night" and payload["mode"] == "stay" and payload.get("arm_profiles") is True:
+                profiled = True
         elif leaf == "command":
             sent.append(payload["command_id"])
         else:
@@ -50,6 +53,9 @@ def main() -> int:
             if payload["command_id"] not in sent:
                 print(f"a result answers a command that was never sent: {body}", file=sys.stderr)
                 return 1
+    if not profiled:
+        print("expected a state armed with an arming profile", file=sys.stderr)
+        return 1
     if counts["state"] < 6 or counts["command"] < 5 or counts["result"] < 5 or not {"disarmed", "exit_delay", "armed", "alarm", "entry_delay"} <= phases or not {"none", "zones_open", "not_disarmed"} <= refusals:
         print(f"expected states in every phase and commands accepted and refused in several ways, got {counts}, phases {sorted(phases)}, refusals {sorted(refusals)}", file=sys.stderr)
         return 1

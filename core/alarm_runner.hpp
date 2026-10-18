@@ -103,7 +103,7 @@ class Runner {
     if (!buttons_[index].feed(!pin_high, now_ms)) return press;
     press.fired = true;
     press.mode = settings_.buttons[index].action == "arm_stay" ? Mode::kStay : Mode::kAway;
-    press.refusal = arm_checked(press.mode, false, now_ms);
+    press.refusal = arm_checked(press.mode, false, now_ms, nullptr);
     return press;
   }
 
@@ -128,8 +128,8 @@ class Runner {
     for (ZoneView& view : views_) if (view.enabled) view.bypassed = panel_.bypassed(view.id);
   }
 
-  // From the panel's own page: arming needs no PIN, disarming does.
-  Refusal arm(Mode mode, bool force, std::uint64_t now_ms) { return arm_checked(mode, force, now_ms); }
+  // From the panel's own page: arming needs no PIN, disarming does. (The panel's page arms without a profile; the server's command may carry one.)
+  Refusal arm(Mode mode, bool force, std::uint64_t now_ms) { return arm_checked(mode, force, now_ms, nullptr); }
   Refusal disarm(const std::string& pin, std::uint64_t now_ms) { return panel_.disarm(pin, now_ms); }
   // Silences the siren with the system still armed: needs the PIN, like disarming.
   Refusal silence(const std::string& pin, std::uint64_t now_ms) { return panel_.silence(pin, now_ms); }
@@ -155,14 +155,16 @@ class Runner {
     if (!settings_.server.commands || !parse_command(text, settings_.node_id, command)) return reply;
     reply.understood = true;
     reply.command = command;
-    reply.refusal = command.action == Action::kArm ? arm_checked(command.mode, command.force, now_ms) : command.action == Action::kSilence ? panel_.silence_authorized(now_ms) : panel_.disarm_authorized(now_ms);
+    reply.refusal = command.action == Action::kArm ? arm_checked(command.mode, command.force, now_ms, command.has_profile ? &command.profile : nullptr) : command.action == Action::kSilence ? panel_.silence_authorized(now_ms) : panel_.disarm_authorized(now_ms);
     return reply;
   }
 
   // What a restart must not forget (see Panel::saved): the manager keeps it in flash when it changes and gives it back at start.
   Panel::Saved saved() const { return panel_.saved(); }
-  bool restore(const Panel::Saved& saved, std::uint64_t now_ms) {
-    const bool armed = panel_.restore(saved, now_ms);
+  // The profile the panel was armed with (kept in flash by the manager) goes back with it, so that the house is guarded the way it was.
+  const ArmProfile* profile() const { return panel_.profile(); }
+  bool restore(const Panel::Saved& saved, std::uint64_t now_ms, const ArmProfile* profile = nullptr) {
+    const bool armed = panel_.restore(saved, now_ms, profile);
     for (ZoneView& view : views_) if (view.enabled) view.bypassed = panel_.bypassed(view.id);
     return armed;
   }
@@ -213,11 +215,11 @@ class Runner {
 
   // Arming looks at the Zigbee sensors that have gone silent as it looks at an open zone: without `force` it is refused ("zones_open"), with it they are left out until the system is
   // disarmed (a silent sensor that were let through would raise the alarm on the next turn, in the middle of the exit delay).
-  Refusal arm_checked(Mode mode, bool force, std::uint64_t now_ms) {
+  Refusal arm_checked(Mode mode, bool force, std::uint64_t now_ms, const ArmProfile* profile) {
     bool any_silent = false;
     if (panel_.phase() == Phase::kDisarmed && mode != Mode::kDisarmed) for (const ZoneView& view : views_) any_silent = any_silent || (view.enabled && view.zigbee && view.silent);
     if (any_silent && !force) return Refusal::kZonesOpen;
-    const Refusal result = panel_.arm(mode, force, now_ms);
+    const Refusal result = panel_.arm(mode, force, now_ms, profile);
     if (result == Refusal::kNone) for (std::size_t i = 0; i < views_.size(); ++i) left_out_[i] = views_[i].enabled && views_[i].zigbee && views_[i].silent;
     return result;
   }

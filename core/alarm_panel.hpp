@@ -14,6 +14,8 @@
 //   - A zone raises the alarm when it CHANGES to triggered (or tamper), not while it stays so: a smoke detector that is still sounding when you disarm does not restart the alarm until it
 //     has been quiet and sounds again. At the moment of arming the zones are looked at as they are (see above).
 //   - Always-zones (smoke, panic) and a tamper alarm in every state, armed or not.
+//   - An arming PROFILE (arm_profile.hpp) can change, for one arming, which zones guard, which ones alarm at once or after the entry delay, the two delays and whether an intrusion sounds the siren.
+//     It changes nothing else: the PIN, the lockout, the silence, the refusal of an arming with a sounding always-zone or a tamper, and smoke, panic and tamper themselves are as above.
 // This is not a certified alarm system, and these rules have never run on a real installation.
 #pragma once
 #include <algorithm>
@@ -22,6 +24,7 @@
 #include <vector>
 
 #include "alarm_zone.hpp"
+#include "arm_profile.hpp"
 
 namespace armor::alarm {
 
@@ -82,12 +85,16 @@ class Panel {
     events_.insert(events_.begin(), older.begin(), older.end());
     if (events_.size() > kMaxEvents) events_.erase(events_.begin(), events_.begin() + static_cast<std::ptrdiff_t>(events_.size() - kMaxEvents));
   }
-  // The zones that would stop an arming in `mode` right now.
-  std::vector<std::string> open_zones(Mode mode) const {
+  // The zones that would stop an arming in `mode` (with `profile`, when there is one) right now.
+  std::vector<std::string> open_zones(Mode mode, const ArmProfile* profile) const {
     std::vector<std::string> out;
-    for (const Slot& s : slots_) if (blocks_arming(s, mode)) out.push_back(s.zone.id);
+    for (const Slot& s : slots_) if (blocks_arming(s, mode, profile)) out.push_back(s.zone.id);
     return out;
   }
+  // The same for the arming the panel is in (the profile it is armed with), or for a plain arming in `mode`.
+  std::vector<std::string> open_zones(Mode mode) const { return open_zones(mode, has_profile_ && mode == mode_ ? &profile_ : nullptr); }
+  // The profile the panel is armed (or arming) with, or nullptr.
+  const ArmProfile* profile() const { return has_profile_ ? &profile_ : nullptr; }
   bool bypassed(const std::string& id) const { const Slot* s = find(id); return s != nullptr && s->bypassed; }
   ZoneState zone_state(const std::string& id) const { const Slot* s = find(id); return s != nullptr ? s->state : ZoneState::kNormal; }
 
@@ -102,10 +109,12 @@ class Panel {
     if (state != before && state != ZoneState::kNormal && state != ZoneState::kTrouble) react(*slot, now_ms);   // a zone that cannot be read tells nothing: it never sounds
   }
 
-  Refusal arm(Mode mode, bool force, std::uint64_t now_ms) {
+  // `profile` (when there is one) is the way of arming the server chose; its base must be `mode`, or it is ignored and the arming is a plain one.
+  Refusal arm(Mode mode, bool force, std::uint64_t now_ms, const ArmProfile* profile = nullptr) {
     if (mode == Mode::kDisarmed) return Refusal::kNotArmed;
     if (phase_ != Phase::kDisarmed) return Refusal::kNotDisarmed;
-    const std::vector<std::string> open = open_zones(mode);
+    if (profile != nullptr && profile->stay != (mode == Mode::kStay)) profile = nullptr;
+    const std::vector<std::string> open = open_zones(mode, profile);
     if (!open.empty() && !force) return Refusal::kZonesOpen;
     // A smoke detector or a panic button that is sounding is never left out, forced or not: it is the one thing that must be looked at first.
     // A cut or shorted loop (tamper) is never left out either: forcing an arming must not hide a sabotage.
@@ -113,10 +122,12 @@ class Panel {
     for (Slot& s : slots_) s.bypassed = false;
     for (const std::string& id : open) { find(id)->bypassed = true; note(now_ms, EventKind::kZoneBypassed, id); }
     mode_ = mode;
+    has_profile_ = profile != nullptr;
+    if (profile != nullptr) profile_ = *profile;
     phase_ = Phase::kExitDelay;
     phase_since_ms_ = now_ms;
     note(now_ms, EventKind::kExitDelayStarted, "");
-    if (timing_.exit_delay_s == 0) finish_exit(now_ms);
+    if (exit_delay_s() == 0) finish_exit(now_ms);
     return Refusal::kNone;
   }
 
@@ -127,6 +138,7 @@ class Panel {
     if (phase_ == Phase::kDisarmed) return Refusal::kNone;
     phase_ = Phase::kDisarmed;
     mode_ = Mode::kDisarmed;
+    has_profile_ = false;
     siren_on_ = false;
     alarmed_.clear();
     resounds_ = 0;
@@ -156,6 +168,7 @@ class Panel {
     if (phase_ == Phase::kDisarmed) return Refusal::kNone;
     phase_ = Phase::kDisarmed;
     mode_ = Mode::kDisarmed;
+    has_profile_ = false;
     siren_on_ = false;
     alarmed_.clear();
     resounds_ = 0;
@@ -166,8 +179,8 @@ class Panel {
 
   // Time passes: the exit and entry delays run out, the siren times out, a lockout ends.
   void tick(std::uint64_t now_ms) {
-    if (phase_ == Phase::kExitDelay && now_ms - phase_since_ms_ >= static_cast<std::uint64_t>(timing_.exit_delay_s) * 1000ULL) finish_exit(now_ms);
-    if (phase_ == Phase::kEntryDelay && now_ms - phase_since_ms_ >= static_cast<std::uint64_t>(timing_.entry_delay_s) * 1000ULL) raise(now_ms, entry_zone_);
+    if (phase_ == Phase::kExitDelay && now_ms - phase_since_ms_ >= static_cast<std::uint64_t>(exit_delay_s()) * 1000ULL) finish_exit(now_ms);
+    if (phase_ == Phase::kEntryDelay && now_ms - phase_since_ms_ >= static_cast<std::uint64_t>(entry_delay_s()) * 1000ULL) raise(now_ms, entry_zone_, false);
     if (phase_ == Phase::kAlarm && siren_on_ && now_ms - alarm_since_ms_ >= static_cast<std::uint64_t>(timing_.siren_max_s) * 1000ULL) { siren_on_ = false; note(now_ms, EventKind::kSirenTimedOut, ""); }
     if (locked_until_ms_ != 0 && now_ms >= locked_until_ms_) { locked_until_ms_ = 0; }
   }
@@ -194,7 +207,8 @@ class Panel {
     return out;
   }
   // Takes the saved state back. Returns true when the panel is not disarmed afterwards.
-  bool restore(const Saved& saved, std::uint64_t now_ms) {
+  // `profile` is the one the panel was armed with (kept apart by the node): taken only when its base is the saved mode.
+  bool restore(const Saved& saved, std::uint64_t now_ms, const ArmProfile* profile = nullptr) {
     // a lockout that was running comes back for as long as it lasts (the clock starts again with the node)
     if (saved.lockout > 0 && saved.lockout <= 3 && locked_until_ms_ == 0) {
       static constexpr std::uint32_t kGrowth[3] = {1, 5, 15};
@@ -207,13 +221,15 @@ class Panel {
     for (Slot& s : slots_) s.bypassed = false;
     for (const std::string& id : saved.bypassed) if (Slot* s = find(id)) s->bypassed = true;
     mode_ = saved.mode;
+    has_profile_ = profile != nullptr && saved.mode != Mode::kDisarmed && profile->stay == (saved.mode == Mode::kStay);
+    if (has_profile_) profile_ = *profile;
     if (saved.mode != Mode::kDisarmed) {
       phase_ = Phase::kArmed;
       phase_since_ms_ = now_ms;
       note(now_ms, EventKind::kArmed, "");
     }
     if (saved.phase == Phase::kAlarm) {
-      raise(now_ms, "");
+      raise(now_ms, "", true);
       if (saved.silenced) siren_on_ = false;   // it had been silenced by the timeout: a restart does not make it louder
     }
     return true;
@@ -229,12 +245,19 @@ class Panel {
   Slot* find(const std::string& id) { for (Slot& s : slots_) if (s.zone.id == id) return &s; return nullptr; }
   const Slot* find(const std::string& id) const { for (const Slot& s : slots_) if (s.zone.id == id) return &s; return nullptr; }
 
-  // Does this zone, in this state, stop the system from being armed in `mode`? An interior zone does not matter in "stay"; a bypassed one never does.
-  static bool blocks_arming(const Slot& s, Mode mode) {
+  // Does this zone, in this state, stop the system from being armed in `mode`? A zone that does not guard in this arming (an interior zone in "stay", or one a profile leaves out) does not
+  // matter while it is only triggered; a bypassed one never does; a tamper or a zone in trouble always does.
+  static bool blocks_arming(const Slot& s, Mode mode, const ArmProfile* profile) {
     if (s.bypassed || s.state == ZoneState::kNormal) return false;
-    if (s.state == ZoneState::kTriggered && s.zone.kind == ZoneKind::kInterior && mode == Mode::kStay) return false;
+    if (s.state == ZoneState::kTriggered && !resolve(s.zone.kind, mode == Mode::kStay, profile, s.zone.id).armed) return false;
     return true;
   }
+
+  std::uint32_t exit_delay_s() const { return has_profile_ && profile_.exit_delay_s >= 0 ? static_cast<std::uint32_t>(profile_.exit_delay_s) : timing_.exit_delay_s; }
+  std::uint32_t entry_delay_s() const { return has_profile_ && profile_.entry_delay_s >= 0 ? static_cast<std::uint32_t>(profile_.entry_delay_s) : timing_.entry_delay_s; }
+  // An intrusion sounds the siren unless the profile says otherwise; smoke, panic and tamper (`forced`) always do.
+  bool siren_allowed(bool forced) const { return forced || !has_profile_ || profile_.siren; }
+  Resolved resolved(const Slot& s) const { return resolve(s.zone.kind, mode_ == Mode::kStay, has_profile_ ? &profile_ : nullptr, s.zone.id); }
 
   bool pin_matches(const std::string& pin) const {
     unsigned char difference = static_cast<unsigned char>(pin.size() != pin_.size());
@@ -285,21 +308,23 @@ class Panel {
     return Refusal::kNone;
   }
 
-  void raise(std::uint64_t now_ms, const std::string& zone) {
+  void raise(std::uint64_t now_ms, const std::string& zone, bool forced) {
+    const bool sounds = siren_allowed(forced);
     if (phase_ == Phase::kAlarm) {
       // The alarm is latched, but a zone that has not sounded yet (or any trigger once the siren has timed out) is news: the siren sounds again, at most kMaxResounds times, and it is noted.
+      // (A silent profile has no siren to sound again: only a zone that has not alarmed yet is news, and a siren that is already sounding is never silenced by it.)
       const bool fresh = !zone.empty() && std::find(alarmed_.begin(), alarmed_.end(), zone) == alarmed_.end();
-      if ((!fresh && siren_on_) || resounds_ >= kMaxResounds) return;
+      if ((!fresh && (siren_on_ || !sounds)) || resounds_ >= kMaxResounds) return;
       ++resounds_;
       if (fresh) alarmed_.push_back(zone);
       alarm_since_ms_ = now_ms;
-      siren_on_ = true;
+      siren_on_ = siren_on_ || sounds;
       note(now_ms, EventKind::kAlarm, zone);
       return;
     }
     phase_ = Phase::kAlarm;
     alarm_since_ms_ = now_ms;
-    siren_on_ = true;
+    siren_on_ = sounds;
     resounds_ = 0;
     alarmed_.clear();
     if (!zone.empty()) alarmed_.push_back(zone);
@@ -309,19 +334,20 @@ class Panel {
   // A zone has just changed to triggered or tamper (or was found so when the exit delay ended).
   void react(Slot& s, std::uint64_t now_ms) {
     if (s.bypassed && s.state != ZoneState::kTamper) return;   // a zone left out ignores its contact, never its sabotage
-    if (s.state == ZoneState::kTamper || s.zone.kind == ZoneKind::kAlways) { raise(now_ms, s.zone.id); return; }   // in every state, even disarmed
+    if (s.state == ZoneState::kTamper || s.zone.kind == ZoneKind::kAlways) { raise(now_ms, s.zone.id, true); return; }   // in every state, even disarmed, and always with the siren
+    const Resolved r = resolved(s);   // whether the zone guards in this arming, and whether it alarms at once or starts the entry delay
     switch (phase_) {
       case Phase::kDisarmed: case Phase::kExitDelay: return;
       case Phase::kAlarm:   // already ringing: a zone that guards in this mode and has not sounded yet sounds the siren again (raise decides)
-        if (mode_ != Mode::kDisarmed && (s.zone.kind == ZoneKind::kInstant || s.zone.kind == ZoneKind::kEntry || (s.zone.kind == ZoneKind::kInterior && mode_ == Mode::kAway))) raise(now_ms, s.zone.id);
+        if (mode_ != Mode::kDisarmed && r.armed) raise(now_ms, s.zone.id, false);
         return;
       case Phase::kEntryDelay:
-        if (s.zone.kind == ZoneKind::kInstant || (s.zone.kind == ZoneKind::kInterior && mode_ == Mode::kAway)) raise(now_ms, s.zone.id);
+        if (r.armed && !r.delayed) raise(now_ms, s.zone.id, false);
         return;
       case Phase::kArmed:
-        if (s.zone.kind == ZoneKind::kInstant) raise(now_ms, s.zone.id);
-        else if (s.zone.kind == ZoneKind::kInterior) { if (mode_ == Mode::kAway) raise(now_ms, s.zone.id); }
-        else if (s.zone.kind == ZoneKind::kEntry) { phase_ = Phase::kEntryDelay; phase_since_ms_ = now_ms; entry_zone_ = s.zone.id; note(now_ms, EventKind::kEntryDelayStarted, s.zone.id); if (timing_.entry_delay_s == 0) raise(now_ms, s.zone.id); }
+        if (!r.armed) return;
+        if (!r.delayed) raise(now_ms, s.zone.id, false);
+        else { phase_ = Phase::kEntryDelay; phase_since_ms_ = now_ms; entry_zone_ = s.zone.id; note(now_ms, EventKind::kEntryDelayStarted, s.zone.id); if (entry_delay_s() == 0) raise(now_ms, s.zone.id, false); }
         return;
     }
   }
@@ -337,6 +363,8 @@ class Panel {
   std::uint64_t phase_since_ms_ = 0, alarm_since_ms_ = 0, locked_until_ms_ = 0;
   std::uint32_t wrong_pins_ = 0, lockouts_ = 0;
   std::string entry_zone_;
+  bool has_profile_ = false;
+  ArmProfile profile_;
   static constexpr std::uint32_t kMaxResounds = 3;
   std::uint32_t resounds_ = 0;
   std::vector<std::string> alarmed_;   // the zones that have sounded in this alarm

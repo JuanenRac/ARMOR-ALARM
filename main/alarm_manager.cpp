@@ -52,6 +52,8 @@ constexpr char kStateNamespace[] = "alarm_state";
 constexpr char kStateKey[] = "panel";
 std::string g_saved_text;   // what is in flash now
 constexpr char kEventsKey[] = "events";
+constexpr char kProfileKey[] = "profile";   // the arming profile the panel is armed with (JSON, as in the arm command), or "" for none
+std::string g_saved_profile;               // what is in flash now
 bool g_forgotten = false;   // a factory reset has erased the saved state: nothing is saved again before the restart
 std::uint64_t g_last_events_write_ms = 0;
 constexpr std::uint64_t kEventsWriteEveryMs = 30000;
@@ -92,6 +94,28 @@ bool read_saved(std::string& out) {
     ok = nvs_get_str(handle, kStateKey, out.data(), &size) == ESP_OK;
     if (ok) out.resize(size - 1);
   }
+  nvs_close(handle);
+  return ok;
+}
+
+bool read_profile(std::string& out) {
+  nvs_handle_t handle;
+  if (nvs_open(kStateNamespace, NVS_READONLY, &handle) != ESP_OK) return false;
+  std::size_t size = 0;
+  bool ok = false;
+  if (nvs_get_str(handle, kProfileKey, nullptr, &size) == ESP_OK && size > 0 && size <= 2048) {
+    out.resize(size);
+    ok = nvs_get_str(handle, kProfileKey, out.data(), &size) == ESP_OK;
+    if (ok) out.resize(size - 1);
+  }
+  nvs_close(handle);
+  return ok;
+}
+
+bool write_profile(const std::string& text) {
+  nvs_handle_t handle;
+  if (nvs_open(kStateNamespace, NVS_READWRITE, &handle) != ESP_OK) return false;
+  const bool ok = nvs_set_str(handle, kProfileKey, text.c_str()) == ESP_OK && nvs_commit(handle) == ESP_OK;
   nvs_close(handle);
   return ok;
 }
@@ -157,6 +181,7 @@ std::uint64_t stamp_ms() { return mqtt_link::clock_is_set() ? mqtt_link::wall_cl
 // What changes the message: the panel's phase, mode and siren and the state of each zone. Called with the lock held.
 std::string signature() {
   std::string text = std::string(alarm::phase_text(g_runner->panel().phase())) + alarm::mode_text(g_runner->panel().mode()) + (g_runner->siren() ? "S" : "s") + (g_runner->locked_out(now_ms()) ? "L" : "l");
+  if (g_runner->profile() != nullptr) text += "P" + g_runner->profile()->id;
   for (const alarm::ZoneView& zone : g_runner->zones()) if (zone.enabled) text += std::string(alarm::state_text(zone.state)) + (zone.bypassed ? "b" : "-");
   return text;
 }
@@ -186,7 +211,8 @@ void on_command(const std::string&, const std::string& payload) {
   if (!g_runner) return;
   const alarm::Reply reply = g_runner->handle(payload, now_ms());
   if (!reply.understood) { ESP_LOGW(kTag, "a message on the command topic was ignored: it is not the contract's command"); return; }
-  ESP_LOGW(kTag, "the server said %s: %s", reply.command.action == alarm::Action::kArm ? "arm" : reply.command.action == alarm::Action::kSilence ? "silence" : "disarm", alarm::refusal_text(reply.refusal));
+  ESP_LOGW(kTag, "the server said %s%s%s: %s", reply.command.action == alarm::Action::kArm ? "arm" : reply.command.action == alarm::Action::kSilence ? "silence" : "disarm",
+           reply.command.has_profile ? " with the profile " : "", reply.command.has_profile ? reply.command.profile.id.c_str() : "", alarm::refusal_text(reply.refusal));
   if (g_publish) g_publish(alarm::topic(g_settings.node_id, "result"), g_runner->result_json(stamp_ms(), reply));
   drive_siren_locked();
   publish_state_locked(true);
@@ -263,7 +289,8 @@ void alarm_task(void*) {
         if (taken > 0) { millivolts[i] = static_cast<double>(sum) / taken; read[i] = true; }
       }
     }
-    std::string to_save, events_to_save;
+    std::string to_save, events_to_save, profile_text;
+    bool profile_changed = false;
     {
     std::lock_guard<std::mutex> guard(g_lock);
     g_runner->set_epoch(wall_epoch());
@@ -292,6 +319,8 @@ void alarm_task(void*) {
     publish_state_locked(false);
     const std::string now_saved = alarm::saved_text(g_runner->saved());
     if (!g_forgotten && now_saved != g_saved_text) to_save = now_saved;
+    profile_text = g_runner->profile() != nullptr && g_runner->panel().mode() != alarm::Mode::kDisarmed ? alarm::profile_json(*g_runner->profile()) : std::string();
+    profile_changed = !g_forgotten && profile_text != g_saved_profile;
     const std::string now_events = alarm::events_text(g_runner->panel().events());
     // Flash wears with every write: a wrong PIN or a bouncing sensor is written at most every half minute; what changes the state of the house (arming, alarm, disarming, lockout) at once.
     const std::vector<alarm::Event>& log = g_runner->panel().events();
@@ -300,6 +329,10 @@ void alarm_task(void*) {
     }
     if (!events_to_save.empty() && write_events(events_to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_events = events_to_save; g_last_events_write_ms = now; }
     // flash is written outside the lock: a write can take tens of milliseconds
+    if (profile_changed) {
+      if (write_profile(profile_text)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_profile = profile_text; }
+      else ESP_LOGE(kTag, "the arming profile could not be saved: a restart would arm the house without it");
+    }
     if (!to_save.empty()) {
       if (write_saved(to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_text = to_save; }
       else ESP_LOGE(kTag, "the state of the panel could not be saved: a restart would leave it disarmed");
@@ -316,9 +349,17 @@ void start(const config::Settings& settings, Publish publish) {
     std::string text;
     alarm::Panel::Saved saved;
     g_saved_text = alarm::saved_text(g_runner->saved());   // disarmed
+    // the arming profile the panel was armed with, if it was armed with one and it can be read back
+    alarm::ArmProfile profile;
+    std::string profile_text;
+    const bool have_profile = read_profile(profile_text) && !profile_text.empty() && alarm::parse_profile_text(profile_text, profile);
     if (read_saved(text) && alarm::parse_saved(text, saved)) {
-      if (g_runner->restore(saved, now_ms())) { ESP_LOGW(kTag, "the node restarted while the panel was %s (%s): it is armed again", alarm::phase_text(saved.phase), text.c_str()); g_saved_text = alarm::saved_text(g_runner->saved()); }
+      if (g_runner->restore(saved, now_ms(), have_profile ? &profile : nullptr)) {
+        ESP_LOGW(kTag, "the node restarted while the panel was %s (%s%s%s): it is armed again", alarm::phase_text(saved.phase), text.c_str(), g_runner->profile() != nullptr ? ", profile " : "", g_runner->profile() != nullptr ? g_runner->profile()->id.c_str() : "");
+        g_saved_text = alarm::saved_text(g_runner->saved());
+      }
     } else if (!text.empty()) ESP_LOGW(kTag, "the saved state of the panel is not readable and was ignored");
+    g_saved_profile = g_runner->profile() != nullptr ? alarm::profile_json(*g_runner->profile()) : std::string();
   }
   {
     std::string text;

@@ -21,8 +21,8 @@
   <img src="https://img.shields.io/badge/License-GPL%203.0-blue.svg" alt="GPL 3.0">
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
-  <img src="https://img.shields.io/badge/Checks-477%2C588-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.3.5-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
+  <img src="https://img.shields.io/badge/Version-0.3.6-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,9 +36,9 @@
 
 | | |
 |---|---|
-| バージョン | `0.3.5` |
+| バージョン | `0.3.6` |
 | 成熟度 | 機能する |
-| テスト | 477,665 checks in 6 programs (`ctest`) |
+| テスト | 482,535 checks in 7 programs (`ctest`) |
 | 技術 | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | 実機での確認 | まだありません：基板、警戒区域、サイレン、Zigbee コーディネーターはいずれも未接続（コンピューター上のテスト、ビルド、ブラウザーでのパネルのみ） |
 
@@ -58,6 +58,8 @@
 * **サイレンと再起動：**サイレンのリレーは警報だけのものです（ブローカー、センター、パネルは動かせず、ブローカーを失っても開きません）。まだ鳴っていないゾーンは、サイレンがタイムアウトした後に再び鳴らします。再起動後は、解除状態の煙・パニック警報、消音された警報、ロックアウトが復元されます。警戒中は手動リセットを拒否します。一度も応答しない Zigbee センサーは失われたものとして扱います。
 * **パネルを使えるのは家だけ：**パネルは既定でプライベートネットワーク（または所有者が指定した VPN などのネットワーク）にだけ応答し、保存する本人を締め出す一覧は拒否します。誤ったパスワードは人ごと・アドレスごとに数え、サーバーのプロキシの背後でも動くので、ノードを公開せずに家の外から使えます。**読み取れないゾーンは「閉」と表示されません：** コンバーターが起動しない、またはループが5ラウンド続けて値を返さない場合、ゾーンは*障害*（trouble）になります。監視せず、サイレンを鳴らすことはなく、警戒開始を止め（強制時は除外して記録）、サーバーが警告します。
 * **ブローカーとの暗号化通信(TLS、任意):** 初期状態ではオフで、ノードはこれまでどおり暗号化なしの MQTT で通信します。ブローカーページのスイッチと、設備独自の認証局の証明書(PEM、最大 2 KB)の入力欄により、`mqtts://` で接続し、その認証局だけを信頼し、到達したアドレス向けに発行された証明書かを確認します。PEM 証明書 1 つでないものは拒否されます。ホストテストで検証済みで、ハンドシェイクはまだ基板では実行していません。
+* **警戒プロファイル:** 警戒コマンドにはプロファイル（外出、在宅、夜間、独自）を付けられ、その警戒について、どのゾーンが警戒するか、どれがすぐに、またはエントリー遅延の後に警報を出すか、退出・進入の遅延、サイレンを鳴らすか（無音の警報も保持・記録・通知されます）を決めます。煙・非常ボタン・改ざんのゾーン、PIN、ロックアウト、消音、強制警戒、異常のゾーンには一切触れません。プロファイルは再起動後も残り、プロファイルなしの警戒はこれまでとまったく同じ動作です。ランダム実行で旧ルールと、共有契約に対してテスト済みです。
+* **状態報告:** ノードは約 1 分ごとに、稼働時間と直前の再起動の理由、空きメモリ、回線と Wi-Fi 信号、ブローカーへの接続回数、最後に記録したエラーを公開します（`armor/health/<ノード>`、ARMOR-COMMON の `node_health` 契約）。作成するコードは全ノードで共有され、コンピューター上でテストされていますが、ボード上ではまだ動作していません。
 
 ## 🖼️ スクリーンショット
 
@@ -76,10 +78,10 @@ ARMOR-ALARM は警報盤です。警戒区域、警戒、遅延、サイレン�
 
 ```text
 ARMOR-ALARM/
-├── core/    alarm_zone, alarm_panel (the rules), alarm_config, alarm_message, alarm_runner (the node), plus the settings every node shares
+├── core/    alarm_zone, alarm_panel (the rules), alarm_config, alarm_message, alarm_runner (the node), arm_profile (the arming profiles), plus the settings every node shares
 ├── main/    the ESP-IDF firmware: alarm_manager, the web server, the Zigbee bridge, the relays
 ├── panel/   the web panel (eight languages)
-├── tests/   test_alarm (the rules), test_node (settings, messages, runner), test_mqtt_tls (the optional encrypted link to the broker), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract), test_zigbee (ZNP, IAS Zone and WD, the node's own conversation with a coordinator)
+├── tests/   test_alarm (the rules), test_profiles (the arming profiles), test_node (settings, messages, runner), test_mqtt_tls (the optional encrypted link to the broker), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract), test_zigbee (ZNP, IAS Zone and WD, the node's own conversation with a coordinator)
 ├── tools/   the stand-in node and the browser test of the panel
 ├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING
 └── images/  brand assets
@@ -90,7 +92,7 @@ ARMOR-ALARM/
 **必要なもの:** a C++17 compiler for the host tests, the ESP-IDF 5.4 container to build the image, an ESP32-S3 board (PoE Ethernet or Wi-Fi)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 477,665 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 482,535 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 [設計](docs/DESIGN.md)、[警報盤がサーバーから引き継ぐ方法](docs/FAILOVER.md)、[安全に関する注意](docs/SAFETY.md)を参照してください。

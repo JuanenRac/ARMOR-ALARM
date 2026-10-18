@@ -2,7 +2,7 @@
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 //   armor/alarm/<node>/state     one message per node, every few seconds and at every change; JSON, no retained flag. What the panel is doing: its phase and mode, the siren, each zone and the last events.
-//   armor/alarm/<node>/command   server -> node: arm (away or stay), disarm or silence the siren. Only read when the node's setting `server.commands` and the broker's access list both allow it.
+//   armor/alarm/<node>/command   server -> node: arm (away or stay, with an optional arming profile), disarm or silence the siren. Only read when the node's setting `server.commands` and the broker's access list both allow it.
 //   armor/alarm/<node>/result    node -> server: whether the command was accepted and why not; never retained.
 // `node_id`, a zone id and a command id follow the rules of the whole of A.R.M.O.R.; a field that is not in the contract is refused, and a command that is not the contract's gets no answer at all.
 // Nothing here touches hardware; it is tested on a computer and checked against ARMOR-COMMON's shared contract.
@@ -13,6 +13,7 @@
 
 #include "alarm_panel.hpp"
 #include "alarm_zone.hpp"
+#include "arm_profile.hpp"
 #include "json.hpp"
 #include "node_id.hpp"
 
@@ -72,6 +73,8 @@ inline std::string state_json(const std::string& node_id, std::uint64_t timestam
     w.end_object();
   }
   w.end_array();
+  w.field("arm_profiles", true);   // this firmware understands the arming profiles of the arm command
+  if (panel.profile() != nullptr && panel.mode() != Mode::kDisarmed) w.field("profile", panel.profile()->id);
   w.end_object();
   return w.str();
 }
@@ -129,6 +132,8 @@ struct Command {
   Action action = Action::kDisarm;
   Mode mode = Mode::kAway;  // for an arm: "away" or "stay"
   bool force = false;       // for an arm: leave out the zones that are open
+  bool has_profile = false; // for an arm: the way of arming the server chose (its base is `mode`)
+  ArmProfile profile;
 };
 
 inline bool valid_command_id(const std::string& id) {
@@ -142,7 +147,7 @@ inline bool parse_command(const std::string& text, const std::string& node_id, C
   json::Value document;
   if (!json::parse(text, document) || !document.is_object()) return false;
   for (const std::string& name : document.names) {
-    if (name != "kind" && name != "node_id" && name != "timestamp_ms" && name != "command_id" && name != "action" && name != "mode" && name != "force") return false;
+    if (name != "kind" && name != "node_id" && name != "timestamp_ms" && name != "command_id" && name != "action" && name != "mode" && name != "force" && name != "profile") return false;
   }
   if (document.string_or("kind", "") != "alarm_command" || document.string_or("node_id", "") != node_id) return false;
   const json::Value* stamp = document.get("timestamp_ms");
@@ -159,12 +164,18 @@ inline bool parse_command(const std::string& text, const std::string& node_id, C
     command.action = Action::kArm;
     if (mode == nullptr || !mode->is_string() || (mode->text != "away" && mode->text != "stay")) return false;   // an arm says which
     command.mode = mode->text == "stay" ? Mode::kStay : Mode::kAway;
+    const json::Value* profile = document.get("profile");
+    if (profile != nullptr) {
+      // a profile is read as strictly as the command: exactly the contract's members, and its base is the mode of the arm
+      if (!parse_profile(*profile, command.profile) || command.profile.stay != (command.mode == Mode::kStay)) return false;
+      command.has_profile = true;
+    }
   } else if (action == "disarm") {
     command.action = Action::kDisarm;
-    if (mode != nullptr || command.force) return false;   // a disarm has nothing to say about a mode or about force
+    if (mode != nullptr || command.force || document.get("profile") != nullptr) return false;   // a disarm has nothing to say about a mode, force or a profile
   } else if (action == "silence") {
     command.action = Action::kSilence;
-    if (mode != nullptr || command.force) return false;   // a silence has nothing to say about a mode or about force
+    if (mode != nullptr || command.force || document.get("profile") != nullptr) return false;   // a silence has nothing to say about a mode, force or a profile
   } else return false;
   out = command;
   return true;
