@@ -288,7 +288,7 @@ class Panel {
         // Each lockout without a right PIN in between lasts longer: once, five times and fifteen times `lockout_s` (a fixed minute let somebody try three PINs a minute for ever).
         static constexpr std::uint32_t kGrowth[3] = {1, 5, 15};
         const std::uint32_t factor = kGrowth[lockouts_ < 2 ? lockouts_ : 2];
-        if (lockouts_ < 2) ++lockouts_;
+        if (lockouts_ < 3) ++lockouts_;   // counts to 3 so that a saved state can tell the third lockout (x15) from the second
         locked_until_ms_ = now_ms + static_cast<std::uint64_t>(timing_.lockout_s) * factor * 1000ULL;
         wrong_pins_ = 0;
         note(now_ms, EventKind::kLockedOut, "");

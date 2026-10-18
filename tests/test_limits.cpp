@@ -16,22 +16,12 @@
 
 static int failures = 0;
 static int checks = 0;
-static int known_gaps = 0;
 #define CHECK(condition)                                                              \
   do {                                                                                \
     ++checks;                                                                         \
     if (!(condition)) {                                                               \
       ++failures;                                                                     \
       std::printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #condition);                \
-    }                                                                                 \
-  } while (0)
-// A behaviour that is wanted and not there yet: it is reported, and it does not fail the run; when the behaviour arrives the check passes and the report goes away.
-#define KNOWN_GAP(condition)                                                          \
-  do {                                                                                \
-    ++checks;                                                                         \
-    if (!(condition)) {                                                               \
-      ++known_gaps;                                                                   \
-      std::printf("KNOWN GAP %s:%d  %s\n", __FILE__, __LINE__, #condition);           \
     }                                                                                 \
   } while (0)
 
@@ -303,10 +293,10 @@ static void test_lockout_survives_a_restart() {
     CHECK(panel.saved().lockout == round);
     panel.tick(1'000'000 * round);
   }
-  // the third lockout lasts fifteen times as long, and a restart during it should bring back the same: it comes back as the second
+  // the third lockout lasts fifteen times as long, and a restart during it brings back the same
   for (int i = 0; i < 3; ++i) panel.disarm("0000", 5'000'000);
   CHECK(panel.locked_out(5'000'000 + 899'999));
-  KNOWN_GAP(panel.saved().lockout == 3);
+  CHECK(panel.saved().lockout == 3);
 }
 
 static void test_events_are_bounded_and_aged() {
@@ -353,12 +343,11 @@ static void test_events_text() {
   for (const EventKind kind : kinds) names.insert(event_text(kind));
   CHECK(names.size() == 10 && names.count("siren_silenced") == 1);
   CHECK(std::string(mode_text(Mode::kAway)) == "away" && std::string(mode_text(Mode::kStay)) == "stay" && std::string(mode_text(Mode::kDisarmed)) == "disarmed");
-  // each kind that is written is read back, except the one added last
+  // each kind that is written is read back
   for (const EventKind kind : kinds) {
     std::vector<Event> one(1);
     one[0].epoch = 1'700'000'000; one[0].kind = kind; one[0].zone = "window";
     const std::vector<Event> back = parse_events(events_text(one));
-    if (kind == EventKind::kSirenSilenced) { KNOWN_GAP(back.size() == 1 && back[0].kind == kind); continue; }
     CHECK(back.size() == 1 && back[0].kind == kind && back[0].epoch == 1'700'000'000 && back[0].zone == "window");
   }
   // an event without real time is not kept, the newest ten are, in order
@@ -524,6 +513,6 @@ int main() {
   test_profiles_are_read_strictly();
   test_commands_are_read_strictly();
   test_loops_and_contacts();
-  std::printf("%d checks, %d failures, %d known gaps\n", checks, failures, known_gaps);
+  std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

@@ -110,7 +110,7 @@ inline std::vector<Event> parse_events(const std::string& text) {
     for (std::size_t i = 0; i < a; ++i) if (item[i] < '0' || item[i] > '9') digits = false;
     if (!digits) continue;
     const std::string kind = item.substr(a + 1, b - a - 1);
-    for (int k = 0; k <= static_cast<int>(EventKind::kZoneBypassed); ++k) {
+    for (int k = 0; k <= static_cast<int>(EventKind::kSirenSilenced); ++k) {
       if (kind != event_text(static_cast<EventKind>(k))) continue;
       Event event;
       event.kind = static_cast<EventKind>(k);

@@ -9,6 +9,7 @@
 // sounding always zone or a zone in trouble, and an arm without a profile behaves exactly as before. The node does not store profiles: the one armed is kept in flash only so that a
 // restart arms the house again the same way.
 #pragma once
+#include <cmath>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -96,7 +97,8 @@ inline bool parse_profile(const json::Value& document, ArmProfile& out) {
   for (const char* key : {"exit_delay_s", "entry_delay_s"}) {
     const json::Value* member = document.get(key);
     if (member == nullptr) continue;
-    if (!member->is_number() || member->number != static_cast<double>(static_cast<long long>(member->number)) || member->number < 0 || member->number > kMaxProfileDelayS) return false;
+    if (!member->is_number() || !std::isfinite(member->number) || member->number < 0 || member->number > kMaxProfileDelayS ||
+        member->number != static_cast<double>(static_cast<long long>(member->number))) return false;
     (key[1] == 'x' ? profile.exit_delay_s : profile.entry_delay_s) = static_cast<int>(member->number);
   }
   const json::Value* siren = document.get("siren");

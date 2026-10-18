@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.8] - Stored passwords follow their host, saved events and lockout step
+
+- A stored password is tied to its host: changing the address of the broker (or of a backup broker slot) without typing a password erases the stored one instead of sending it to the new host, and the panel says under the field that the password has to be typed again. The same host (another port, other letter case) keeps it.
+- The siren-silenced event is kept in flash and read back after a restart (the list of event kinds stopped one short).
+- A restart in the middle of the third PIN lockout (fifteen times as long) brings back the third lockout, not the second.
+- The exit and entry delays of an arming profile are range-checked before they are converted to whole numbers (infinite and enormous values are refused).
+- The access point bandwidth accepts only 20 or 40 MHz (a value in between was accepted and run as 20); an address in the list of networks that may use the panel is refused when a part has a leading zero, as the address parser of the network settings already did.
+
 ## [0.3.7] - Sign-in form for password managers
 
 - The sign-in page is a real form with named fields (`username`, `current-password`), so the browser's or system's password manager offers to save and fill the credentials; the set-up page names its fields the same way for the new password.
