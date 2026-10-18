@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## [0.3.5] - An optional encrypted link to the broker (TLS)
+
+- New settings mqtt.tls (off by default) and mqtt.ca_pem (one certificate in PEM, at most 2 KB; anything else is refused). With TLS on, the node connects with mqtts://, trusts only that authority and checks that the broker's certificate was made for the address it reached; it waits for its clock first (up to two minutes), because certificates have dates. With the switch off nothing changes: the node talks plain MQTT as before.
+- The Broker page of the panel has a switch and a box for the certificate of the installation's own authority, in the eight languages, with the new error texts. The saved backup brokers must be mqtts:// too while the switch is on.
+- Host tests of the settings: defaults off, the JSON round trip, line ends from a browser, and the refusal of a text that is not PEM, a chain, a text that is too long and a plain address with TLS on. The handshake has not been run on a board.
+
 ## [0.3.4] - Silence the siren with the PIN, without disarming
 
 - A correct PIN now silences a ringing siren at once while the system stays armed: the alarm stays latched and recorded, a zone that has not sounded yet may sound the siren again (the re-sound rules are unchanged), and a wrong PIN counts toward the lockout exactly like a wrong disarm PIN.
