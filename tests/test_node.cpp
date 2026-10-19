@@ -450,7 +450,20 @@ static void test_buttons_arm_the_panel() {
   CHECK(has(config::validate(bad), "buttons.2.action", "invalid"));
 }
 
+// Settings kept by another version of the firmware are read as far as they can be: what this version does not know is ignored and what it cannot accept falls back alone.
+static void test_stored_settings_after_an_update() {
+  const config::Settings base = valid_settings();
+  config::Settings out;
+  config::Problems dropped;
+  CHECK(config::load_stored(R"({"node":{"name":"kept"},"future":{"a":[1,2]},"ap":{"channel":99},"ui":{"language":5},"time":{"zone":"Europe/Madrid"},"mqtt":{"heartbeat_s":99999}})", base, out, dropped));
+  CHECK(out.node_name == "kept" && out.time.zone == "Europe/Madrid");
+  CHECK(out.ap.channel == base.ap.channel && out.language == base.language && out.mqtt.heartbeat_s == base.mqtt.heartbeat_s && dropped.size() == 3);
+  CHECK(config::load_stored(config::to_json(base, true), base, out, dropped) && dropped.empty());
+  CHECK(!config::load_stored("{broken", base, out, dropped));
+}
+
 int main() {
+  test_stored_settings_after_an_update();
   test_defaults();
   test_zones();
   test_panel_settings();

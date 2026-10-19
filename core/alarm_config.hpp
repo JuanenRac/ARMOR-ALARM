@@ -20,6 +20,7 @@
 #include "io_config.hpp"
 #include "local_zigbee.hpp"
 #include "node_settings.hpp"
+#include "stored_load.hpp"
 
 namespace armor::config {
 
