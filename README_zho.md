@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.1-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.2-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,7 +36,7 @@
 
 | | |
 |---|---|
-| 版本 | `0.4.1` |
+| 版本 | `0.4.2` |
 | 成熟度 | 可用 |
 | 测试 | 486,098 checks in 13 programs (`ctest`) |
 | 技术栈 | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
@@ -60,6 +60,7 @@
 * **可选的与代理加密连接(TLS):** 默认关闭,因此节点仍像以前一样使用未加密的 MQTT。代理页面中的一个开关和一个用于填写本安装自有证书颁发机构证书(PEM,最大 2 KB)的框,会让节点用 `mqtts://` 连接、只信任该机构,并检查代理证书是否为其所到达的地址而签发;不是单个 PEM 证书的内容会被拒绝。已有主机测试覆盖;握手尚未在电路板上运行。
 * **布防配置：** 布防命令可以带一个配置（离家、在家、夜间或自定义），为这次布防选择哪些分区守护、哪些分区立即报警或在进入延时后报警、退出和进入延时，以及警笛是否鸣响（静音报警仍会锁定、记录和通知）。它绝不触及烟雾、紧急按钮或防拆分区、PIN、锁定、消音、强制布防或故障分区；配置在重启后保留，不带配置的布防行为与以前完全一致。已通过随机运行对照旧规则测试，并对照共享契约测试。
 * **健康报告：** 节点大约每分钟发布一次：已运行多久、上次为何重启、可用内存、连接与 Wi-Fi 信号、连接代理的次数以及记录的最后一个错误（`armor/health/<节点>`，即 ARMOR-COMMON 的 `node_health` 契约）。生成它的代码由所有节点共享并在计算机上测试；尚未在开发板上运行。
+* **由服务器控制：** Studio 可以干净地重启节点、将其暂停至多一小时（自动恢复）、让其工作进入待机（无期限，重启后仍保持，节点保持连接并继续应答）、让它显示自己、请求诊断快照，并把它标记为维护中（`armor/control/<节点>/...`，ARMOR-COMMON 的 `node_control` 契约）。每条命令分两步，使用只属于该操作的一次性令牌，只有服务器可以在代理上写入，并且没有恢复出厂设置、擦除或深度睡眠。节点处于暂停或待机时，不读取防区，不做任何判断、布防或鸣响，不发布状态，警笛继电器保持断开：住宅没有受到保护，健康报告会如实说明。 该代码由所有节点共用，并已在计算机上测试；尚未在电路板上运行过。
 
 ## 🖼️ 屏幕截图
 

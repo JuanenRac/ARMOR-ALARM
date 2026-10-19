@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.1-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.2-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,7 +36,7 @@
 
 | | |
 |---|---|
-| Versão | `0.4.1` |
+| Versão | `0.4.2` |
 | Maturidade | Funcional |
 | Testes | 486,098 checks in 13 programs (`ctest`) |
 | Tecnologia | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
@@ -60,6 +60,7 @@
 * **Ligação cifrada opcional ao broker (TLS):** desativada por predefinição, por isso o nó fala MQTT sem cifra como antes. Um interruptor e uma caixa para o certificado da autoridade própria da instalação (PEM, no máximo 2 KB) na página Broker fazem-no ligar-se com `mqtts://`, confiar só nessa autoridade e verificar que o certificado do broker foi feito para o endereço alcançado; o que não for um único certificado PEM é recusado. Coberto por testes no computador; o handshake ainda não foi executado numa placa.
 * **Perfis de armar:** um comando de armar pode levar um perfil (Ausente, Em casa, Noite, o seu) que escolhe, para esse armar, que zonas vigiam, quais disparam o alarme logo ou após o atraso de entrada, os atrasos de saída e de entrada e se a sirene toca (um alarme silencioso fica trancado, registado e avisado). Nunca toca nas zonas de fumo, pânico ou sabotagem, no PIN, no bloqueio, no silêncio, num armar forçado nem numa zona com problema; o perfil sobrevive a um reinício e um armar sem perfil comporta-se exatamente como antes. Testado contra as regras antigas com uma execução aleatória e contra o contrato partilhado.
 * **Relatório de saúde:** cerca de uma vez por minuto o nó publica há quanto tempo está ligado e porque reiniciou da última vez, a memória livre, a ligação e o sinal Wi-Fi, quantas vezes se ligou ao broker e o último erro que registou (`armor/health/<nó>`, o contrato `node_health` do ARMOR-COMMON). O código que o constrói é partilhado por todos os nós e testado num computador; nunca correu numa placa.
+* **Controlo a partir do servidor:** o Studio pode reiniciar o nó de forma limpa, pô-lo em pausa até uma hora (retoma sozinho), pôr o seu trabalho em espera (sem fim, mantida nos reinícios, o nó continua ligado e a responder), fazê-lo mostrar-se, pedir um instantâneo de diagnóstico e marcá-lo em manutenção (`armor/control/<nó>/...`, o contrato `node_control` do ARMOR-COMMON). Cada ordem tem dois passos com um token de uso único que pertence a essa operação, só o servidor as pode escrever no broker, e não existe reposição de fábrica, apagamento nem sono profundo. Enquanto o nó está em pausa ou em espera, as suas zonas não são lidas, nada é avaliado, armado ou tocado, nenhum estado é publicado e o relé da sirene fica aberto: a casa NÃO está protegida, e o relatório de saúde di-lo. O código é partilhado por todos os nós e testado num computador; ainda não correu numa placa.
 
 ## 🖼️ Capturas de ecrã
 
