@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.0-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.1-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,9 +36,9 @@
 
 | | |
 |---|---|
-| バージョン | `0.4.0` |
+| バージョン | `0.4.1` |
 | 成熟度 | 機能する |
-| テスト | 486,078 checks in 13 programs (`ctest`) |
+| テスト | 486,098 checks in 13 programs (`ctest`) |
 | 技術 | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | 実機での確認 | まだありません：基板、警戒区域、サイレン、Zigbee コーディネーターはいずれも未接続（コンピューター上のテスト、ビルド、ブラウザーでのパネルのみ） |
 
@@ -92,7 +92,7 @@ ARMOR-ALARM/
 **必要なもの:** a C++17 compiler for the host tests, the ESP-IDF 5.4 container to build the image, an ESP32-S3 board (PoE Ethernet or Wi-Fi)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,078 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,098 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 [設計](docs/DESIGN.md)、[警報盤がサーバーから引き継ぐ方法](docs/FAILOVER.md)、[安全に関する注意](docs/SAFETY.md)を参照してください。
