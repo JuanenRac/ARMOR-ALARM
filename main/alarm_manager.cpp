@@ -26,6 +26,7 @@ extern "C" {
 #include "core/local_zigbee.hpp"
 #include "entropy.hpp"
 #include "mqtt_link.hpp"
+#include "node_guard.hpp"
 #include "relay_outputs.hpp"
 #include "zigbee_bridge.hpp"
 
@@ -378,6 +379,7 @@ void start(const config::Settings& settings, Publish publish) {
     mqtt_link::subscribe(alarm::topic(settings.node_id, "command"), on_command);
     ESP_LOGI(kTag, "the server may arm, disarm and silence the panel (armor/alarm/%s/command)", settings.node_id.c_str());
   }
+  nodeguard::expect_task("alarm");   // the guard looks for the task that watches the zones
   xTaskCreate(alarm_task, "alarm", 6144, nullptr, 5, nullptr);
 }
 
