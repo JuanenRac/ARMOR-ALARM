@@ -27,6 +27,7 @@ extern "C" {
 #include "entropy.hpp"
 #include "mqtt_link.hpp"
 #include "node_guard.hpp"
+#include "node_control.hpp"
 #include "relay_outputs.hpp"
 #include "zigbee_bridge.hpp"
 
@@ -208,6 +209,7 @@ void drive_siren_locked() {
 }
 
 void on_command(const std::string&, const std::string& payload) {
+  if (!node_control::working()) { ESP_LOGW(kTag, "a command of the server was ignored: the node's work is off (paused or in standby), the house is NOT protected"); return; }
   std::lock_guard<std::mutex> guard(g_lock);
   if (!g_runner) return;
   const alarm::Reply reply = g_runner->handle(payload, now_ms());
@@ -273,6 +275,16 @@ void alarm_task(void*) {
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(kStepMs));
     esp_task_wdt_reset();
+    if (!node_control::working()) {
+      // Paused or in standby by the server's order: the zones are not read, nothing is evaluated or armed, no state is published and no siren sounds (the relay is held open by
+      // relay_outputs::hold_open and a Zigbee siren is told to stop). The panel's state stays as it was and is taken up again at the resume. The house is NOT protected meanwhile: the
+      // node's health report says paused or standby.
+      std::lock_guard<std::mutex> guard(g_lock);
+      if (g_siren_relay >= 0) relay_outputs::siren(false);
+      if (g_siren_on) { g_siren_on = false; ESP_LOGW(kTag, "the siren is off: the node's work is off"); }
+      if (g_host && g_host->ready() && g_zigbee_siren_told) { g_host->siren(false, g_settings.panel.timing.siren_max_s); g_zigbee_siren_told = false; }
+      continue;
+    }
     const std::uint64_t now = now_ms();
     std::array<double, config::kZoneCount> millivolts{};
     std::array<bool, config::kZoneCount> read{};
