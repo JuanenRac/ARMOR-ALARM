@@ -6,6 +6,17 @@ All notable changes to this project are documented here.
 
 - The repository has a security policy, a code of conduct, a contributing guide and a support file.
 - The banner follows the animated style of the ecosystem banners, with the name, the kind and the technologies of the project.
+## [0.4.4] - The server's security options applied by the panel, the zone feed checked, wrong passwords per minute as a setting and interlocked relays
+
+- **The panel applies the options the server keeps for it** (`armor/alarm/<node>/policy`): it keeps the last it heard in flash, so they hold from its first moment after a restart, and until the server speaks it does what it always did. Each of the three can also be fixed on the node (*Delays and PIN*, *Security options of the server*): follow the server, on, or off.
+- **The saved armed state is tied to the zones and the PIN:** with the option on, a restart does not give the armed state back to a panel whose zones or PIN changed (it starts disarmed and says why in its log); a state saved before the option comes back as before.
+- **The Zigbee zone messages of the server are checked:** a signed message needs the right signature (HMAC-SHA256 with the key of the panel, which an administrator types in the panel and is never shown again) and a sequence number above the last; an unsigned message is refused only when a signature is required and the panel holds the key, so an update does not shut the feed of a panel that has no key yet; the feed can be switched off. Verified against the value the contract and the server compute.
+- **A relay can name another that must never be closed at the same time;** the siren, which the alarm forces, is not held back.
+- **The limit on wrong passwords per minute is a setting of the node:** `system.login_limit_per_minute` (30 as always, 0 for none, at most 120) with its field and its explanation in the panel in the eight languages; the limit of each address and of each person is not touched by it.
+- **The certificate of the broker can be loaded from a file** on the Broker page (it is checked for the BEGIN and END lines, a private key is refused, and it must fit the 2048 characters the node keeps); nothing is sent to the node until the page is saved.
+- **New checks in the host tests:** the Bluetooth session stays under its lock and a request or an answer never crosses to another connection (`check_ble_session.py`); the routes every node serves, the routes the panel calls and the stand-in node the panel is tried against agree (`check_routes.py`); the guard on the paths of a save also keeps the tolerant read of the stored settings, the serial set-up that makes the Wi-Fi the way in, and the answer to a release without an image for the board.
+- **The universal image holds no fleet secret unless asked for:** `tools/build_node.sh generic` adds `secrets/generic.conf` only with `ARMOR_WITH_FLEET_SECRET=1`, names that image `*-local` and says it is never to be published, and a public build is refused when the configuration it ended with holds a secret or a set-up code; the option's help says the same.
+
 ## [0.4.3] - Node diagnostics
 
 - **ESP-IDF 5.5.5 is the one version:** `tools/build_node.sh` uses the 5.5.5 container, and the firmware guide, the requirements of the READMEs and the manifest name it (it said 5.4 in places).
