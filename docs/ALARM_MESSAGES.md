@@ -63,7 +63,7 @@ When the server signs its feed, each message also carries `seq` (a number that o
 - `zone_feed`: off, and the messages above are ignored.
 - `zone_feed_signature`: on, and an unsigned message, or a signed one that cannot be checked because the panel holds no key, is refused.
 
-Each of the three can also be fixed on the node itself (Delays and PIN page, "Security options of the server"): *Follow the server* (the default), *On* or *Off*, whatever the server says. A signature required on the node needs the key to be stored.
+Each of the three can also be fixed on the node itself (Delays and PIN page, "Security options of the server"): *Follow the server* (the default), *On* or *Off*, whatever the server says. A signature required on the node needs the key to be stored. The broker lets a node read this topic only if its account says so: a node made after this version has the line, and one made before gets it with `mqtt_identity.sh alarm-policy <node>` (ARMOR-DEVOPS).
 
 ## The arming profile
 
