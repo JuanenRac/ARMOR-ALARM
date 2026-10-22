@@ -4,7 +4,7 @@
   "name": "ARMOR-ALARM",
   "version": "0.4.3",
   "role": "Alarm node and panel: the zones, the arming, the delays, the siren and the PIN of the house's alarm, with the server or without it",
-  "stack": "C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards)",
+  "stack": "C++17 host-tested core; ESP-IDF 5.5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards)",
   "technologies": [
     "C++17",
     "Zigbee (IAS Zone / IAS WD)",

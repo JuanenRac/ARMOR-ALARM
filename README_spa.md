@@ -39,7 +39,7 @@
 | Versión | `0.4.3` |
 | Madurez | Funcional |
 | Tests | 486.098 comprobaciones en 13 programas (`ctest`) |
-| Tecnología | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
+| Tecnología | C++17 host-tested core; ESP-IDF 5.5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | En hardware real | Ninguno todavía: ninguna placa, zona, sirena ni coordinador Zigbee conectados (solo tests en ordenador, la compilación y el panel en un navegador) |
 
 ## 🎯 Descripción general
@@ -91,7 +91,7 @@ ARMOR-ALARM/
 
 ## 🛠️ Entorno de desarrollo
 
-**Requisitos:** un compilador de C++17 para las pruebas en el PC, el contenedor de ESP-IDF 5.4 para compilar la imagen, una placa ESP32-S3 (Ethernet con PoE o Wi-Fi)
+**Requisitos:** un compilador de C++17 para las pruebas en el PC, el contenedor de ESP-IDF 5.5.5 para compilar la imagen, una placa ESP32-S3 (Ethernet con PoE o Wi-Fi)
 
 ```bash
 cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,098 checks: the rules, the settings, the messages, the runner and the update from GitHub
