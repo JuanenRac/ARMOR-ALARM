@@ -137,6 +137,23 @@ try {
   check("the corrected PIN is saved and never shown", savedPanel.config.panel.pin_set === true && savedPanel.config.panel.pin === undefined && savedPanel.config.zones[1].id === "window", JSON.stringify(savedPanel.config.panel));
   await shot(`apanel-${board}-panel.png`);
 
+  // ---- the security options the server keeps for the panel, on the same page: each can follow the server or be fixed here, and the key of the zone messages is a secret
+  body = await text();
+  check("the panel page offers the server's security options and the key of its zone messages", body.includes("Security options of the server") && body.includes("Follow the server") && body.includes("Key of the zone messages"), body.slice(0, 200));
+  await setText('input[maxlength="64"]', "abc");
+  await clickButton("Save"); await sleep(900);
+  check("a key that is not 64 hexadecimal digits is refused", (await ev("document.querySelectorAll('input.bad').length")) > 0);
+  await setText('input[maxlength="64"]', "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff");
+  await ev(`(() => { const s = [...document.querySelectorAll('select')].find(x => [...x.options].some(o => o.value === 'policy')); s.value = 'off'; s.dispatchEvent(new Event('change', { bubbles: true })); })()`);
+  await clickButton("Save"); await sleep(900);
+  const savedServer = (await (await fetch("http://127.0.0.1:18122/api/v1/config", { headers: { Cookie: cookie } })).json()).config.server;
+  check("the key is saved and never shown, and an option fixed on the node is kept", savedServer.zone_feed_key_set === true && savedServer.zone_feed_key === undefined && savedServer.config_hash === "off" && savedServer.zone_feed === "policy", JSON.stringify(savedServer));
+
+  // ---- the node's own limit on wrong passwords per minute, on the System page
+  await goto("network");
+  body = await text();
+  check("the network page (with the system card) offers the limit on wrong passwords per minute", body.includes("Wrong passwords per minute, for the whole node"), body.slice(0, 200));
+
   // ---- the Zigbee radio and the relays
   await ev("window.confirm = () => true");
   await goto("zigbee");
@@ -174,7 +191,7 @@ try {
   await goto("update");
   body = await text();
   check("the firmware page offers the GitHub check", body.includes("Check GitHub for a new version") && body.includes("Check now"), body.slice(0, 200));
-  await clickButton("Check now"); await sleep(700);
+  await clickButton("Check now"); await sleep(1800);   // the node looks in a task of its own: started, then asked about after 0.8 s
   check("the check offers a newer version", (await text()).includes("Version 9.9.9 is available."));
   await ev("location.reload()"); await sleep(1500);
 

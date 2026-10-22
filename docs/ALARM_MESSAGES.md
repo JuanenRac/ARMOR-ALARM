@@ -45,6 +45,26 @@ One message per node, every five seconds and at every change (the phase, the mod
 - The panel takes it only while it does not hold the radio. When the node holds the radio it hears the sensors itself, and what the server said would be older.
 - It is information, never a command: it cannot arm or disarm. But what it says is believed: a zone that the server reports as triggered (or as tamper, which counts even disarmed) is a zone that went off, and the panel raises its alarm and sounds the siren by its own rules (the kind of zone, the delays, whether it is armed); a report of "normal" hides a sensor that the radio would say otherwise. Whoever can publish on this topic is therefore trusted with the zones, which is why the broker's access list gives it to the server's account alone. The panel also watches the feed: with `zigbee_silence_min` set, a sensor that is not heard for that long (through the feed or through the radio) is lost, and while the system is armed a lost sensor is a tamper. The broker lets the node read this one topic and nothing else without an explicit `alarm-commands ... on`.
 
+### Signed zone messages
+
+When the server signs its feed, each message also carries `seq` (a number that only goes up: the server's time in milliseconds) and `sig` (64 lowercase hexadecimal digits), always together:
+
+```json
+{"zone":"front-door","state":"triggered","battery_low":false,"seq":1700000000000,"sig":"330aa293a19d730d0deede3598b3efbed43887483298f15832c9ba4bfbda0378"}
+```
+
+`sig` is the HMAC-SHA256 over `node_id|zone|state|battery_low (1 or 0)|seq` with the key of this panel (64 hexadecimal digits that an administrator takes from Studio and types in the panel, Delays and PIN page; it is stored like the PIN and never shown again). A panel that holds the key refuses a message whose signature is wrong or whose `seq` is not above the last one it took, and says so in its log. `tests/test_policy.cpp` holds the value above, which ARMOR-COMMON and ARMOR-SERVER compute too.
+
+## The server's security options
+
+`armor/alarm/{node_id}/policy`: JSON, never retained, from the server to the panel (said again every thirty seconds): `{"config_hash":true,"zone_feed":true,"zone_feed_signature":false}`, exactly those three flags. The panel keeps the last one it heard in flash, so it applies it from its first moment after a restart, and until the server has spoken it does what it always did.
+
+- `config_hash`: the saved armed state is tied to a hash of the zones (which, where, how) and the PIN it was saved under, and is not given back after a restart if either changed (the panel then starts disarmed and says why in its log). A state saved before the option was on has no hash and comes back as before.
+- `zone_feed`: off, and the messages above are ignored.
+- `zone_feed_signature`: on, and an unsigned message, or a signed one that cannot be checked because the panel holds no key, is refused.
+
+Each of the three can also be fixed on the node itself (Delays and PIN page, "Security options of the server"): *Follow the server* (the default), *On* or *Off*, whatever the server says. A signature required on the node needs the key to be stored.
+
 ## The arming profile
 
 An arm may carry a `profile` (the `arm_profile` message of ARMOR-COMMON), chosen by the server from the modes the owner keeps (Away, Home, Night, their own). The node stores none of them: the one in the command is used for that arming, and a copy is kept in flash only so that a restart arms the house the same way. The state message says that the node understands profiles (`arm_profiles: true`, the server sends a profile only to a node that says so) and, while armed with one, its id (`profile`).

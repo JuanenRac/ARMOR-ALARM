@@ -182,20 +182,32 @@ inline bool parse_command(const std::string& text, const std::string& node_id, C
 }
 
 // What the server says about a Zigbee zone while it holds the radio: {"zone": "<id>", "state": "normal" | "triggered" | "tamper", "battery_low": false}. Strict, like a command: false for
-// anything else. Information only: it cannot arm, disarm or sound anything, it only says how a zone is.
+// anything else. Information only: it cannot arm, disarm or sound anything, it only says how a zone is. When the server signs its feed the message also carries "seq" (a number that only
+// goes up) and "sig" (64 lowercase hexadecimal digits), always together (see alarm_policy.hpp for how they are checked).
 struct ZoneFeed {
   std::string zone_id;
   ZoneState state = ZoneState::kNormal;
   bool battery_low = false;
+  bool signed_message = false;
+  std::uint64_t seq = 0;
+  std::string sig;
 };
 
 inline bool parse_zone_feed(const std::string& text, ZoneFeed& out) {
   json::Value document;
   if (!json::parse(text, document) || !document.is_object()) return false;
-  for (const std::string& name : document.names) if (name != "zone" && name != "state" && name != "battery_low") return false;
+  for (const std::string& name : document.names) if (name != "zone" && name != "state" && name != "battery_low" && name != "seq" && name != "sig") return false;
   const json::Value* zone = document.get("zone");
   const json::Value* state = document.get("state");
   const json::Value* low = document.get("battery_low");
+  const json::Value* seq = document.get("seq");
+  const json::Value* sig = document.get("sig");
+  if ((seq == nullptr) != (sig == nullptr)) return false;   // they come together or not at all
+  if (seq != nullptr) {
+    if (!seq->is_number() || !sig->is_string() || sig->text.size() != 64) return false;
+    if (!(seq->number >= 0.0 && seq->number <= 9007199254740991.0) || seq->number != static_cast<double>(static_cast<std::uint64_t>(seq->number))) return false;
+    for (const char c : sig->text) if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+  }
   if (zone == nullptr || !zone->is_string() || zone->text.empty() || zone->text.size() > 32) return false;
   if (state == nullptr || !state->is_string() || (low != nullptr && !low->is_bool())) return false;
   ZoneFeed feed;
@@ -205,6 +217,7 @@ inline bool parse_zone_feed(const std::string& text, ZoneFeed& out) {
   else if (state->text == "tamper") feed.state = ZoneState::kTamper;
   else return false;
   feed.battery_low = low != nullptr && low->boolean;
+  if (seq != nullptr) { feed.signed_message = true; feed.seq = static_cast<std::uint64_t>(seq->number); feed.sig = sig->text; }
   out = feed;
   return true;
 }

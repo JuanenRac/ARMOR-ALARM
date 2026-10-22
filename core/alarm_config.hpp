@@ -67,8 +67,23 @@ struct PanelSetting {
 
 // Whether the server may arm and disarm the panel by a command (armor/alarm/<node>/command). OFF by default: the panel then answers only to its own page. On, the broker's access list must
 // allow it too (ARMOR-DEVOPS, mqtt_identity.sh alarm-commands <node> on): both are needed, and the server has its own switch.
+//
+// The security options the server keeps for the panel (armor/alarm/<node>/policy, set in Studio) can each be left to the server ("policy", the default: the node does what the server last told
+// it, and what it did before the server ever said anything), or fixed on this node ("on" / "off"), whatever the server says:
+//   config_hash:      the saved armed state is tied to a hash of the zones and the PIN and is not restored when either changed;
+//   zone_feed:        the server's messages about the Zigbee zones are taken (off: they are ignored);
+//   zone_signature:   a message of the server's zone feed must be signed with the key below (off: an unsigned one is taken too; a signed one is checked whenever there is a key).
+enum class Choice { kPolicy, kOn, kOff };
+inline const char* to_text(Choice v) { return v == Choice::kOn ? "on" : v == Choice::kOff ? "off" : "policy"; }
+inline bool zone_feed_key_is_valid(std::string_view key) {
+  if (key.size() != 64) return false;
+  for (const char c : key) if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+  return true;
+}
 struct ServerLink {
   bool commands = false;
+  Choice config_hash = Choice::kPolicy, zone_feed = Choice::kPolicy, zone_signature = Choice::kPolicy;
+  std::string zone_feed_key;   // 64 hexadecimal digits, from Studio (GET /api/v1/alarm/zone-feed/key/{node}); a secret like the PIN, never shown again
 };
 
 struct Settings : NodeSettings, IoSettings {
@@ -169,7 +184,14 @@ inline void read_settings(const json::Value& document, Settings& s, Problems& pr
       }
     }
   }
-  if (const json::Value* server = document.get("server"); server != nullptr && server->is_object()) read_bool(*server, "commands", s.server.commands, "server.commands", problems);
+  if (const json::Value* server = document.get("server"); server != nullptr && server->is_object()) {
+    read_bool(*server, "commands", s.server.commands, "server.commands", problems);
+    const std::initializer_list<std::pair<const char*, Choice>> choices = {{"policy", Choice::kPolicy}, {"on", Choice::kOn}, {"off", Choice::kOff}};
+    if (!read_choice<Choice>(*server, "config_hash", choices, s.server.config_hash)) bad(problems, "server.config_hash", "invalid");
+    if (!read_choice<Choice>(*server, "zone_feed", choices, s.server.zone_feed)) bad(problems, "server.zone_feed", "invalid");
+    if (!read_choice<Choice>(*server, "zone_signature", choices, s.server.zone_signature)) bad(problems, "server.zone_signature", "invalid");
+    read_secret(*server, "zone_feed_key", s.server.zone_feed_key, "server.zone_feed_key", problems);
+  }
 }
 
 // ---- checking ------------------------------------------------------------------------------------------------------------------
@@ -244,6 +266,8 @@ inline Problems validate(const Settings& s) {
     if (!found) bad(problems, "panel.siren_relay", "unknown_relay");
   }
   if (s.server.commands && !s.mqtt.enabled) bad(problems, "server.commands", "needs_broker");
+  if (!s.server.zone_feed_key.empty() && !zone_feed_key_is_valid(s.server.zone_feed_key)) bad(problems, "server.zone_feed_key", "invalid");
+  if (s.server.zone_signature == Choice::kOn && s.server.zone_feed_key.empty()) bad(problems, "server.zone_feed_key", "required");   // a signature nobody can check would shut the feed for good
   // the radio the node may take over is the one on its board or a coordinator on the network
   const bool has_radio = s.zigbee.enabled || !s.zigbee.network_host.empty();
   if (s.zigbee_local.after_s != 0 && (s.zigbee_local.after_s < 10 || !has_radio)) bad(problems, "zigbee_local.after_s", has_radio ? "range" : "needs_zigbee");
@@ -275,7 +299,9 @@ inline std::string to_json(const Settings& s, bool secrets) {
       .field("lockout_s", static_cast<long long>(s.panel.timing.lockout_s)).field("zigbee_silence_min", static_cast<long long>(s.panel.timing.zigbee_silence_min)).field("siren_relay", s.panel.siren_relay);
   if (secrets) w.field("pin", s.panel.pin); else w.field("pin_set", !s.panel.pin.empty());
   w.end_object();
-  w.key("server").begin_object().field("commands", s.server.commands).end_object();
+  w.key("server").begin_object().field("commands", s.server.commands).field("config_hash", to_text(s.server.config_hash)).field("zone_feed", to_text(s.server.zone_feed)).field("zone_signature", to_text(s.server.zone_signature));
+  if (secrets) w.field("zone_feed_key", s.server.zone_feed_key); else w.field("zone_feed_key_set", !s.server.zone_feed_key.empty());
+  w.end_object();
   w.key("zigbee_local").begin_object().field("after_s", s.zigbee_local.after_s).key("sirens").begin_array();
   for (const std::string& siren : s.zigbee_local.sirens) if (!siren.empty()) w.string(siren);
   w.end_array().end_object();

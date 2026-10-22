@@ -13,6 +13,7 @@
 #include "alarm_config.hpp"
 #include "alarm_message.hpp"
 #include "alarm_panel.hpp"
+#include "alarm_policy.hpp"
 #include "alarm_zone.hpp"
 
 namespace armor::alarm {
@@ -136,9 +137,14 @@ class Runner {
 
   // The state of a Zigbee zone as the server tells it. It counts only while the server holds the radio: when this node holds it, the node hears the sensors itself and what the server says
   // would be older than what it hears. A message that is not the contract's, or for a zone that is not a Zigbee one, changes nothing. True when it was taken.
+  // The server's options decide first (alarm_policy.hpp): a feed that is off, unsigned where a signature is required, signed wrongly or with a sequence number that does not go up changes nothing,
+  // and the reason is kept (last_feed_verdict) for the panel's page and the log.
   bool handle_zone_feed(const std::string& text, std::uint64_t now_ms) {
     ZoneFeed feed;
-    if (radio_ || !parse_zone_feed(text, feed)) return false;
+    if (radio_) return false;
+    if (!parse_zone_feed(text, feed)) { last_feed_verdict_ = FeedVerdict::kMalformed; return false; }
+    last_feed_verdict_ = check_zone_feed(effective(), settings_.server, settings_.node_id, feed, last_feed_seq_);
+    if (last_feed_verdict_ != FeedVerdict::kAccepted) { ++feeds_refused_; return false; }
     for (const ZoneView& view : views_) {
       if (view.enabled && view.zigbee && view.id == feed.zone_id) {
         feed_zigbee(feed.zone_id, feed.state, feed.battery_low, now_ms);
@@ -147,6 +153,19 @@ class Runner {
     }
     return false;
   }
+
+  // The options the server keeps for this panel (armor/alarm/<node>/policy). A message that is not the contract's changes nothing. True when it was taken.
+  bool handle_policy(const std::string& text) {
+    Policy next;
+    if (!parse_policy(text, next)) return false;
+    policy_ = next;
+    return true;
+  }
+  void set_policy(const Policy& policy) { policy_ = policy; }
+  const Policy& policy() const { return policy_; }
+  Effective effective() const { return alarm::effective(settings_.server, policy_); }
+  FeedVerdict last_feed_verdict() const { return last_feed_verdict_; }
+  unsigned feeds_refused() const { return feeds_refused_; }
 
   // From the server, as a message. A command that is not the contract's is not understood and gets no answer.
   Reply handle(const std::string& text, std::uint64_t now_ms) {
@@ -209,6 +228,10 @@ class Runner {
   std::string result_json(std::uint64_t timestamp_ms, const Reply& reply) const { return alarm::result_json(settings_.node_id, timestamp_ms, reply.command, reply.refusal, panel_.phase()); }
 
  private:
+  Policy policy_;
+  FeedVerdict last_feed_verdict_ = FeedVerdict::kAccepted;
+  std::uint64_t last_feed_seq_ = 0;
+  unsigned feeds_refused_ = 0;
   bool radio_ = false;
   std::uint64_t listening_since_ms_ = 0;
   std::array<bool, config::kZoneCount> left_out_{};   // Zigbee sensors that were silent when a forced arming left them out

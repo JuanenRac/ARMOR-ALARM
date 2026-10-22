@@ -39,13 +39,13 @@ const config = {
   buttons: Array.from({ length: 4 }, () => ({ enabled: false, action: "arm_away", pin: -1 })),
   loop: { short_below_mv: 400, normal_below_mv: 1200, triggered_below_mv: 2400 },
   panel: { exit_delay_s: 10, entry_delay_s: 10, siren_max_s: 60, lockout_after: 3, lockout_s: 30, siren_relay: "siren", pin_set: true },
-  server: { commands: false },
+  server: { commands: false, config_hash: "policy", zone_feed: "policy", zone_signature: "policy", zone_feed_key_set: false },
   zigbee_local: { after_s: 0, sirens: [] },
   zigbee: { enabled: true, rx: 18, tx: 17, reset: 21, bootloader: 47, baud: 115200, port: 8888, allowed_client: "192.168.0.180", fallback_client: "", fallback_after_s: 30 },
   remote: { relays: false, link_timeout_s: 0, http: false, token_set: false },
   relays: Array.from({ length: 8 }, (_, i) => ({ enabled: i < 2, name: ["siren", "lights"][i] ?? `relay${i + 1}`, label: ["Siren", "Hall lights"][i] ?? "", pin: wired ? [38, 39, 40, 41, 42, 43, 44, 48][i] : [38, 39, 40, 41, 42, 11, 12, 13][i], active_low: i === 1 })),
   time: { ntp_enabled: true, ntp: "pool.ntp.org", zone: "CET-1CEST,M3.5.0,M10.5.0/3" },
-  system: { auto_restart_hours: 0 },
+  system: { auto_restart_hours: 0, login_limit_per_minute: 30 },
   web: { mode: "both" },
   ble: { mode: "setup" },
   ui: { language: "en" },
@@ -145,6 +145,8 @@ const problems = doc => {
   }
   if ((doc.zones ?? config.zones).some(z => z.enabled) && doc.panel && doc.panel.pin !== undefined && doc.panel.pin !== "" && !/^\d{4,12}$/.test(doc.panel.pin)) list.push({ path: "panel.pin", code: "invalid" });
   if (doc.server?.commands && !(doc.mqtt?.enabled ?? config.mqtt.enabled)) list.push({ path: "server.commands", code: "needs_broker" });
+  for (const name of ["config_hash", "zone_feed", "zone_signature"]) if (doc.server?.[name] !== undefined && !["policy", "on", "off"].includes(doc.server[name])) list.push({ path: "server." + name, code: "invalid" });
+  if (doc.server?.zone_feed_key !== undefined && doc.server.zone_feed_key !== "" && !/^[0-9a-f]{64}$/.test(doc.server.zone_feed_key)) list.push({ path: "server.zone_feed_key", code: "invalid" });
   return list;
 };
 
@@ -199,6 +201,8 @@ const server = createServer(async (request, response) => {
       else config[key] = value;
     }
     if (typeof config.panel.pin === "string") { if (config.panel.pin) config.panel.pin_set = true; delete config.panel.pin; }
+    if (config.server.zone_feed_key_clear === true) { config.server.zone_feed_key_set = false; delete config.server.zone_feed_key_clear; }
+    if (typeof config.server.zone_feed_key === "string") { if (config.server.zone_feed_key) config.server.zone_feed_key_set = true; delete config.server.zone_feed_key; }
     if (typeof config.remote.token === "string") { if (config.remote.token) config.remote.token_set = true; delete config.remote.token; }
     for (const section of [config.ap, config.sta, config.mqtt]) if (typeof section.password === "string" && section.password) { section.password_set = true; delete section.password; } else delete section.password;
     return json(response, 200, { ok: true, restart_required: true });
@@ -287,6 +291,15 @@ const server = createServer(async (request, response) => {
     return json(response, 200, { ok: true, restart_required: false });
   }
   if (method === "GET" && route === "log") return json(response, 200, { next: logText.length, text: logText.slice(Number(url.searchParams.get("from") ?? 0)) });
+  // the routes of the family that the panel calls and a stand-in must know too (tests/check_routes.py compares what the panel calls with this file and with the firmware)
+  if (method === "GET" && route === "ble-pin") { if (!needAdmin()) return; return json(response, 200, { pin: "123456" }); }
+  if (method === "GET" && route === "config/export") { if (!needAdmin()) return; return json(response, 200, { config }); }
+  if (method === "GET" && route === "coredump/info") { if (!needAdmin()) return; return json(response, 200, { present: false }); }
+  if (method === "POST" && route === "coredump/erase") { if (!needAdmin()) return; return json(response, 200, { ok: true }); }
+  if (method === "POST" && route === "ota/copy") { if (!needAdmin()) return; return json(response, 200, { ok: true, started: true }); }
+  if (method === "GET" && route === "ota/copy") { if (!needAdmin()) return; return json(response, 200, { state: "done", done: 1, total: 1, error: "", version: "0.0.3" }); }
+  if (method === "POST" && route === "time") { if (!needAdmin()) return; return json(response, 200, { ok: true }); }
+  if (method === "POST" && route === "ota/check") { if (!needAdmin()) return; return json(response, 200, { ok: true, started: true }); }   // the look for a release is started, then asked about
   if (method === "GET" && route === "ota/check") { if (!needAdmin()) return; return json(response, 200, { ok: true, current_version: "0.2.3", latest_version: "9.9.9", update_available: true }); }
   if (method === "POST" && route === "ota/install") { if (!needAdmin()) return; return json(response, 200, { ok: true, started: true }); }
   if (method === "GET" && route === "ota/progress") { if (!needAdmin()) return; return json(response, 200, { state: "downloading", got: 300000, total: 1200000 }); }

@@ -56,6 +56,13 @@ std::string g_saved_text;   // what is in flash now
 constexpr char kEventsKey[] = "events";
 constexpr char kProfileKey[] = "profile";   // the arming profile the panel is armed with (JSON, as in the arm command), or "" for none
 std::string g_saved_profile;               // what is in flash now
+// The options the server keeps for the panel (armor/alarm/<node>/policy) are kept in flash too, so the first thing a restart does is already under them; and the hash of the zones and the PIN the
+// saved state was saved under, so that a state is not given back to a panel whose zones or PIN are not the ones it was saved for (only when the option is on, see core/alarm_policy.hpp).
+constexpr char kPolicyKey[] = "policy";
+constexpr char kHashKey[] = "cfgh";
+std::string g_saved_policy;    // the policy in flash now
+std::string g_saved_hash;      // the hash in flash now ("" when none)
+std::string g_config_hash;     // the hash of the configuration this node is running with
 bool g_forgotten = false;   // a factory reset has erased the saved state: nothing is saved again before the restart
 std::uint64_t g_last_events_write_ms = 0;
 constexpr std::uint64_t kEventsWriteEveryMs = 30000;
@@ -118,6 +125,28 @@ bool write_profile(const std::string& text) {
   nvs_handle_t handle;
   if (nvs_open(kStateNamespace, NVS_READWRITE, &handle) != ESP_OK) return false;
   const bool ok = nvs_set_str(handle, kProfileKey, text.c_str()) == ESP_OK && nvs_commit(handle) == ESP_OK;
+  nvs_close(handle);
+  return ok;
+}
+
+bool read_key(const char* key, std::string& out, std::size_t longest) {
+  nvs_handle_t handle;
+  if (nvs_open(kStateNamespace, NVS_READONLY, &handle) != ESP_OK) return false;
+  std::size_t size = 0;
+  bool ok = false;
+  if (nvs_get_str(handle, key, nullptr, &size) == ESP_OK && size > 0 && size <= longest + 1) {
+    out.resize(size);
+    ok = nvs_get_str(handle, key, out.data(), &size) == ESP_OK;
+    if (ok) out.resize(size - 1);
+  }
+  nvs_close(handle);
+  return ok;
+}
+
+bool write_key(const char* key, const std::string& text) {
+  nvs_handle_t handle;
+  if (nvs_open(kStateNamespace, NVS_READWRITE, &handle) != ESP_OK) return false;
+  const bool ok = nvs_set_str(handle, key, text.c_str()) == ESP_OK && nvs_commit(handle) == ESP_OK;
   nvs_close(handle);
   return ok;
 }
@@ -224,7 +253,28 @@ void on_command(const std::string&, const std::string& payload) {
 // The server tells the panel how its Zigbee zones are while it holds the radio (information, never a command: it is read even when the server may not arm the panel).
 void on_zone_feed(const std::string&, const std::string& payload) {
   std::lock_guard<std::mutex> guard(g_lock);
-  if (g_runner) g_runner->handle_zone_feed(payload, now_ms());
+  if (!g_runner) return;
+  g_runner->handle_zone_feed(payload, now_ms());
+  static std::uint64_t last_warning_ms = 0;
+  if (g_runner->last_feed_verdict() != alarm::FeedVerdict::kAccepted && now_ms() - last_warning_ms > 60000) {   // a flood of bad messages is one line a minute
+    last_warning_ms = now_ms();
+    ESP_LOGW(kTag, "a message about a Zigbee zone was not taken (%s); %u refused since the start", alarm::verdict_text(g_runner->last_feed_verdict()), g_runner->feeds_refused());
+  }
+}
+
+// The options the server keeps for the panel. The node keeps the last it heard in flash, so it applies them from its first moment after a restart.
+void on_policy(const std::string&, const std::string& payload) {
+  std::string to_write;
+  {
+    std::lock_guard<std::mutex> guard(g_lock);
+    if (!g_runner || !g_runner->handle_policy(payload)) { ESP_LOGW(kTag, "a message on the policy topic was ignored: it is not the contract's policy"); return; }
+    const std::string canonical = alarm::policy_text(g_runner->policy());
+    if (canonical != g_saved_policy) to_write = canonical;
+  }
+  if (!to_write.empty() && write_key(kPolicyKey, to_write)) {
+    { std::lock_guard<std::mutex> guard(g_lock); g_saved_policy = to_write; }
+    ESP_LOGI(kTag, "the server's security options changed: %s", to_write.c_str());
+  }
 }
 
 void alarm_task(void*) {
@@ -303,7 +353,7 @@ void alarm_task(void*) {
       }
     }
     std::string to_save, events_to_save, profile_text;
-    bool profile_changed = false;
+    bool profile_changed = false, bind_hash = false, hash_due = false;
     {
     std::lock_guard<std::mutex> guard(g_lock);
     g_runner->set_epoch(wall_epoch());
@@ -332,6 +382,8 @@ void alarm_task(void*) {
     publish_state_locked(false);
     const std::string now_saved = alarm::saved_text(g_runner->saved());
     if (!g_forgotten && now_saved != g_saved_text) to_save = now_saved;
+    bind_hash = g_runner->effective().config_hash;
+    hash_due = !g_forgotten && bind_hash && !g_saved_text.empty() && g_saved_hash != g_config_hash;
     profile_text = g_runner->profile() != nullptr && g_runner->panel().mode() != alarm::Mode::kDisarmed ? alarm::profile_json(*g_runner->profile()) : std::string();
     profile_changed = !g_forgotten && profile_text != g_saved_profile;
     const std::string now_events = alarm::events_text(g_runner->panel().events());
@@ -347,8 +399,14 @@ void alarm_task(void*) {
       else ESP_LOGE(kTag, "the arming profile could not be saved: a restart would arm the house without it");
     }
     if (!to_save.empty()) {
-      if (write_saved(to_save)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_text = to_save; }
+      if (write_saved(to_save)) {
+        { std::lock_guard<std::mutex> guard(g_lock); g_saved_text = to_save; }
+        if (bind_hash && write_key(kHashKey, g_config_hash)) { std::lock_guard<std::mutex> guard(g_lock); g_saved_hash = g_config_hash; }
+      }
       else ESP_LOGE(kTag, "the state of the panel could not be saved: a restart would leave it disarmed");
+    } else if (hash_due && write_key(kHashKey, g_config_hash)) {   // the option was turned on after the state was saved: tie that state to the configuration it was saved under
+      std::lock_guard<std::mutex> guard(g_lock);
+      g_saved_hash = g_config_hash;
     }
   }
 }
@@ -366,8 +424,18 @@ void start(const config::Settings& settings, Publish publish) {
     alarm::ArmProfile profile;
     std::string profile_text;
     const bool have_profile = read_profile(profile_text) && !profile_text.empty() && alarm::parse_profile_text(profile_text, profile);
+    {
+      std::string policy_text;
+      alarm::Policy policy;
+      if (read_key(kPolicyKey, policy_text, 256) && alarm::parse_policy(policy_text, policy)) { g_runner->set_policy(policy); g_saved_policy = alarm::policy_text(policy); }
+      if (!read_key(kHashKey, g_saved_hash, 64)) g_saved_hash.clear();
+      g_config_hash = alarm::config_fingerprint(settings);
+    }
     if (read_saved(text) && alarm::parse_saved(text, saved)) {
-      if (g_runner->restore(saved, now_ms(), have_profile ? &profile : nullptr)) {
+      if (!alarm::may_restore(g_runner->effective().config_hash, g_saved_hash, g_config_hash)) {
+        ESP_LOGW(kTag, "the zones or the PIN are not the ones the saved state (%s) was saved for: it was not restored, the panel starts disarmed", text.c_str());
+        g_saved_text.clear();   // flash still holds the old state: the next turn of the loop writes the disarmed one over it
+      } else if (g_runner->restore(saved, now_ms(), have_profile ? &profile : nullptr)) {
         ESP_LOGW(kTag, "the node restarted while the panel was %s (%s%s%s): it is armed again", alarm::phase_text(saved.phase), text.c_str(), g_runner->profile() != nullptr ? ", profile " : "", g_runner->profile() != nullptr ? g_runner->profile()->id.c_str() : "");
         g_saved_text = alarm::saved_text(g_runner->saved());
       }
@@ -387,6 +455,7 @@ void start(const config::Settings& settings, Publish publish) {
     ESP_LOGI(kTag, "the node takes the Zigbee radio itself after %d s without the server's client", settings.zigbee_local.after_s);
   }
   mqtt_link::subscribe(alarm::topic(settings.node_id, "zigbee"), on_zone_feed);
+  mqtt_link::subscribe(alarm::topic(settings.node_id, "policy"), on_policy);
   if (settings.server.commands) {
     mqtt_link::subscribe(alarm::topic(settings.node_id, "command"), on_command);
     ESP_LOGI(kTag, "the server may arm, disarm and silence the panel (armor/alarm/%s/command)", settings.node_id.c_str());
