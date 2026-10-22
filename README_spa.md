@@ -22,13 +22,13 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.3-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.4-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
 ---
 
-**Comprobación de honestidad - qué funciona hoy:** Lo que existe es el **núcleo de la alarma** (qué es una zona, cómo un bucle cableado leído por el ADC se convierte en un estado, las reglas de la central: armado, retardos, la alarma, la sirena, el PIN con bloqueo) y el **firmware del nodo** construido sobre él (ajustes, panel web, mensajes con el servidor, el puente de la radio Zigbee, un coordinador Zigbee en la red, relés, Bluetooth, actualizaciones firmadas), que compila para las dos placas; el núcleo, los ajustes, los mensajes y el panel en un navegador real contra un nodo de pega se prueban en un ordenador con 477.588 comprobaciones en 6 programas de test. **Nada ha corrido en una placa ni en una instalación real, no se ha cableado ninguna zona ni conectado ninguna sirena, la conversación Zigbee del propio nodo con un coordinador (local o en la red) está escrita y probada contra un coordinador de pega pero nunca ha corrido contra un coordinador ni un sensor reales, y esto no es un sistema de alarma certificado.**
+**Comprobación de honestidad - qué funciona hoy:** Lo que existe es el **núcleo de la alarma** (qué es una zona, cómo un bucle cableado leído por el ADC se convierte en un estado, las reglas de la central: armado, retardos, la alarma, la sirena, el PIN con bloqueo) y el **firmware del nodo** construido sobre él (ajustes, panel web, mensajes con el servidor, el puente de la radio Zigbee, un coordinador Zigbee en la red, relés, Bluetooth, actualizaciones firmadas), que compila para las dos placas; el núcleo, los ajustes, los mensajes y el panel en un navegador real contra un nodo de pega se prueban en un ordenador con 486.690 comprobaciones en 14 programas de test. **Nada ha corrido en una placa ni en una instalación real, no se ha cableado ninguna zona ni conectado ninguna sirena, la conversación Zigbee del propio nodo con un coordinador (local o en la red) está escrita y probada contra un coordinador de pega pero nunca ha corrido contra un coordinador ni un sensor reales, y esto no es un sistema de alarma certificado.**
 
 ---
 
@@ -36,9 +36,9 @@
 
 | | |
 |---|---|
-| Versión | `0.4.3` |
+| Versión | `0.4.4` |
 | Madurez | Funcional |
-| Tests | 486.098 comprobaciones en 13 programas (`ctest`) |
+| Tests | 486.690 comprobaciones en 14 programas (`ctest`) |
 | Tecnología | C++17 host-tested core; ESP-IDF 5.5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | En hardware real | Ninguno todavía: ninguna placa, zona, sirena ni coordinador Zigbee conectados (solo tests en ordenador, la compilación y el panel en un navegador) |
 
@@ -62,6 +62,7 @@
 * **Informe de salud:** cada minuto más o menos el nodo publica cuánto lleva encendido y por qué se reinició la última vez, su memoria libre, su enlace y su señal Wi-Fi, cuántas veces se conectó al broker y el último error que anotó (`armor/health/<nodo>`, el contrato `node_health` de ARMOR-COMMON). El código que lo construye lo comparten todos los nodos y está probado en un ordenador; no se ha ejecutado en una placa.
 * **Control desde el servidor:** Studio puede reiniciar el nodo limpiamente, pausarlo hasta una hora (se reanuda solo), poner su trabajo en espera (sin fin, se conserva al reiniciar, el nodo sigue conectado y respondiendo), hacer que se muestre, pedirle una instantánea de diagnóstico y marcarlo en mantenimiento (`armor/control/<nodo>/...`, el contrato `node_control` de ARMOR-COMMON). Cada orden son dos pasos con un token de un solo uso que pertenece a esa operación, solo el servidor puede escribirlas en el broker, y no existe restablecimiento de fábrica, borrado ni sueño profundo. Mientras el nodo está en pausa o en espera no se leen sus zonas, no se evalúa, arma ni hace sonar nada, no se publica estado y el relé de la sirena se mantiene abierto: la casa NO está protegida, y el informe de salud lo dice. El código es compartido por todos los nodos y se prueba en un ordenador; no ha funcionado en una placa.
 * **Diagnóstico sin cable:** tras un arranque que no fue limpio (un cuelgue, un watchdog, una caída de la alimentación, una reserva de memoria fallida) el informe de salud dice el motivo durante diez minutos; un fallo deja su volcado de núcleo (core dump) para verlo, descargarlo o borrarlo desde el panel; los ajustes guardados se copian antes de cada instalación de firmware y se recuperan si una actualización los daña; y un administrador puede pedir al nodo, a través del servidor, un paquete de diagnóstico o su registro con un token de un solo uso.
+* **Las opciones de seguridad del servidor:** la central aplica las opciones que el servidor guarda para ella (`armor/alarm/<nodo>/policy`) y cada una puede fijarse en el propio nodo: el estado armado guardado se ata a las zonas y al PIN, los mensajes de zona Zigbee del servidor pueden apagarse y, si van firmados, se comprueban (firma con una clave escrita en el panel y un número de secuencia que solo crece). Probado en un ordenador con los valores que calculan el contrato y el servidor; no se ha ejecutado en una placa.
 
 ## 🖼️ Capturas de pantalla
 
@@ -94,7 +95,7 @@ ARMOR-ALARM/
 **Requisitos:** un compilador de C++17 para las pruebas en el PC, el contenedor de ESP-IDF 5.5.5 para compilar la imagen, una placa ESP32-S3 (Ethernet con PoE o Wi-Fi)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,098 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,690 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Véanse [el diseño](docs/DESIGN.md), [cómo la central toma el relevo del servidor](docs/FAILOVER.md) y las [notas de seguridad](docs/SAFETY.md).

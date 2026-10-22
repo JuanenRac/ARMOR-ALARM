@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.3-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.4-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,9 +36,9 @@
 
 | | |
 |---|---|
-| Version | `0.4.3` |
+| Version | `0.4.4` |
 | Maturité | Fonctionnel |
-| Tests | 486 098 vérifications dans 13 programmes (`ctest`) |
+| Tests | 486 690 vérifications dans 14 programmes (`ctest`) |
 | Technologie | C++17 host-tested core; ESP-IDF 5.5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | Sur matériel réel | Aucun pour l'instant : ni carte, ni zone, ni sirène, ni coordinateur Zigbee connectés (seulement des tests sur ordinateur, la compilation et le panneau dans un navigateur) |
 
@@ -62,6 +62,7 @@
 * **Rapport de santé :** environ une fois par minute le nœud publie depuis combien de temps il tourne et pourquoi il a redémarré la dernière fois, sa mémoire libre, sa liaison et son signal Wi-Fi, combien de fois il s'est connecté au broker et la dernière erreur notée (`armor/health/<nœud>`, le contrat `node_health` d'ARMOR-COMMON). Le code qui le construit est partagé par tous les nœuds et testé sur un ordinateur ; il n'a pas tourné sur une carte.
 * **Commande depuis le serveur :** Studio peut redémarrer le nœud proprement, le mettre en pause jusqu'à une heure (il reprend seul), mettre son travail en veille (sans fin, conservée aux redémarrages, le nœud reste connecté et continue de répondre), le faire se signaler, demander un instantané de diagnostic et le marquer en maintenance (`armor/control/<nœud>/...`, le contrat `node_control` d'ARMOR-COMMON). Chaque ordre se fait en deux temps avec un jeton à usage unique propre à cette opération, seul le serveur peut les écrire sur le broker, et il n'existe ni réinitialisation d'usine, ni effacement, ni sommeil profond. Tant que le nœud est en pause ou en veille, ses zones ne sont pas lues, rien n'est évalué, armé ni sonné, aucun état n'est publié et le relais de la sirène reste ouvert : la maison n'est PAS protégée, et le rapport de santé le dit. Le code est partagé par tous les nœuds et testé sur un ordinateur ; il n'a pas tourné sur une carte.
 * **Diagnostic sans câble :** après un démarrage qui n'était pas propre (plantage, chien de garde, chute d'alimentation, allocation échouée), le rapport de santé en donne la raison pendant dix minutes ; un plantage laisse son vidage mémoire (core dump) à consulter, télécharger ou effacer depuis le panneau ; les réglages enregistrés sont copiés avant chaque installation de micrologiciel et récupérés si une mise à jour les abîme ; et un administrateur peut demander au nœud, via le serveur, un paquet de diagnostic ou son journal avec un jeton à usage unique.
+* **Les options de sécurité du serveur :** la centrale applique les options que le serveur garde pour elle (`armor/alarm/<nœud>/policy`) et chacune peut être fixée sur le nœud lui-même : l'état armé enregistré est lié aux zones et au code PIN, les messages de zone Zigbee du serveur peuvent être coupés et, s'ils sont signés, ils sont vérifiés (signature avec une clé saisie dans le panneau et un numéro de séquence qui ne fait qu'augmenter). Testé sur un ordinateur avec les valeurs que calculent le contrat et le serveur ; non exécuté sur une carte.
 
 ## 🖼️ Captures d'écran
 
@@ -94,7 +95,7 @@ ARMOR-ALARM/
 **Prérequis:** un compilateur C++17 pour les tests sur l'ordinateur, le conteneur ESP-IDF 5.5.5 pour compiler l'image, une carte ESP32-S3 (Ethernet PoE ou Wi-Fi)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,098 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,690 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Voir [la conception](docs/DESIGN.md), [comment la centrale prend le relais du serveur](docs/FAILOVER.md) et les [notes de sécurité](docs/SAFETY.md).

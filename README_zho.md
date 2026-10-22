@@ -22,13 +22,13 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.3-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.4-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
 ---
 
-**诚实性检查 - 今天真正能运行的部分:** 目前存在的是**报警核心**（什么是防区、ADC 读取的有线回路如何变成状态、主机的规则：布防、延时、报警、警笛、带锁定的 PIN）以及建立在其上的**节点固件**（设置、网页面板、与服务器的消息、Zigbee 无线电的桥接、网络上的 Zigbee 协调器、继电器、蓝牙、签名更新），可为两种板子构建；核心、设置、消息以及在真实浏览器中对照替身节点的面板，在计算机上用 13 个测试程序中的 486,078 项检查进行测试。**没有任何东西在板上或真实安装中运行过，没有接过任何防区，也没有连接过警笛；节点自己与协调器（本地或网络上）的 Zigbee 对话已编写并对照替身协调器测试，但从未对照真实的协调器或传感器运行，而且这不是经过认证的报警系统。**
+**诚实性检查 - 今天真正能运行的部分:** 目前存在的是**报警核心**（什么是防区、ADC 读取的有线回路如何变成状态、主机的规则：布防、延时、报警、警笛、带锁定的 PIN）以及建立在其上的**节点固件**（设置、网页面板、与服务器的消息、Zigbee 无线电的桥接、网络上的 Zigbee 协调器、继电器、蓝牙、签名更新），可为两种板子构建；核心、设置、消息以及在真实浏览器中对照替身节点的面板，在计算机上用 14 个测试程序中的 486,690 项检查进行测试。**没有任何东西在板上或真实安装中运行过，没有接过任何防区，也没有连接过警笛；节点自己与协调器（本地或网络上）的 Zigbee 对话已编写并对照替身协调器测试，但从未对照真实的协调器或传感器运行，而且这不是经过认证的报警系统。**
 
 ---
 
@@ -36,9 +36,9 @@
 
 | | |
 |---|---|
-| 版本 | `0.4.3` |
+| 版本 | `0.4.4` |
 | 成熟度 | 可用 |
-| 测试 | 13 个程序中的 486,098 项检查（`ctest`） |
+| 测试 | 14 个程序中的 486,690 项检查（`ctest`） |
 | 技术栈 | C++17 host-tested core; ESP-IDF 5.5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | 真实硬件 | 暂无：没有连接板子、防区、警笛或 Zigbee 协调器（仅有计算机测试、构建和浏览器中的面板） |
 
@@ -62,6 +62,7 @@
 * **健康报告：** 节点大约每分钟发布一次：已运行多久、上次为何重启、可用内存、连接与 Wi-Fi 信号、连接代理的次数以及记录的最后一个错误（`armor/health/<节点>`，即 ARMOR-COMMON 的 `node_health` 契约）。生成它的代码由所有节点共享并在计算机上测试；尚未在开发板上运行。
 * **由服务器控制：** Studio 可以干净地重启节点、将其暂停至多一小时（自动恢复）、让其工作进入待机（无期限，重启后仍保持，节点保持连接并继续应答）、让它显示自己、请求诊断快照，并把它标记为维护中（`armor/control/<节点>/...`，ARMOR-COMMON 的 `node_control` 契约）。每条命令分两步，使用只属于该操作的一次性令牌，只有服务器可以在代理上写入，并且没有恢复出厂设置、擦除或深度睡眠。节点处于暂停或待机时，不读取防区，不做任何判断、布防或鸣响，不发布状态，警笛继电器保持断开：住宅没有受到保护，健康报告会如实说明。 该代码由所有节点共用，并已在计算机上测试；尚未在电路板上运行过。
 * **无需线缆的诊断：** 在一次不干净的启动之后（崩溃、看门狗、电源跌落、内存分配失败），健康报告会在十分钟内说明原因；崩溃会留下核心转储（core dump），可在面板中查看、下载或删除；已保存的设置会在每次固件安装前被复制，并在更新损坏它们时恢复；管理员还可以通过服务器，用一次性令牌向节点索取诊断包或其日志。
+* **服务器的安全选项：**面板会应用服务器为它保存的选项（`armor/alarm/<节点>/policy`），每一项也可以在节点本身固定：已保存的布防状态与防区和 PIN 绑定，服务器的 Zigbee 防区消息可以关闭，带签名时会被校验（用在面板中输入的密钥验签，序列号只增不减）。已在计算机上按合同和服务器计算的值测试；尚未在开发板上运行。
 
 ## 🖼️ 屏幕截图
 
@@ -94,7 +95,7 @@ ARMOR-ALARM/
 **环境要求:** 用于主机测试的 C++17 编译器, 用于构建镜像的 ESP-IDF 5.5.5 容器, ESP32-S3 开发板（PoE 以太网或 Wi-Fi）
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,098 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,690 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 参见[设计](docs/DESIGN.md)、[主机如何接替服务器](docs/FAILOVER.md)和[安全说明](docs/SAFETY.md)。

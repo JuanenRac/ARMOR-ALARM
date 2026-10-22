@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.3-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.4-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,9 +36,9 @@
 
 | | |
 |---|---|
-| Versão | `0.4.3` |
+| Versão | `0.4.4` |
 | Maturidade | Funcional |
-| Testes | 486 098 verificações em 13 programas (`ctest`) |
+| Testes | 486 690 verificações em 14 programas (`ctest`) |
 | Tecnologia | C++17 host-tested core; ESP-IDF 5.5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | Em hardware real | Nenhum ainda: nenhuma placa, zona, sirene ou coordenador Zigbee ligados (só testes no computador, a compilação e o painel num navegador) |
 
@@ -62,6 +62,7 @@
 * **Relatório de saúde:** cerca de uma vez por minuto o nó publica há quanto tempo está ligado e porque reiniciou da última vez, a memória livre, a ligação e o sinal Wi-Fi, quantas vezes se ligou ao broker e o último erro que registou (`armor/health/<nó>`, o contrato `node_health` do ARMOR-COMMON). O código que o constrói é partilhado por todos os nós e testado num computador; nunca correu numa placa.
 * **Controlo a partir do servidor:** o Studio pode reiniciar o nó de forma limpa, pô-lo em pausa até uma hora (retoma sozinho), pôr o seu trabalho em espera (sem fim, mantida nos reinícios, o nó continua ligado e a responder), fazê-lo mostrar-se, pedir um instantâneo de diagnóstico e marcá-lo em manutenção (`armor/control/<nó>/...`, o contrato `node_control` do ARMOR-COMMON). Cada ordem tem dois passos com um token de uso único que pertence a essa operação, só o servidor as pode escrever no broker, e não existe reposição de fábrica, apagamento nem sono profundo. Enquanto o nó está em pausa ou em espera, as suas zonas não são lidas, nada é avaliado, armado ou tocado, nenhum estado é publicado e o relé da sirene fica aberto: a casa NÃO está protegida, e o relatório de saúde di-lo. O código é partilhado por todos os nós e testado num computador; ainda não correu numa placa.
 * **Diagnóstico sem cabo:** depois de um arranque que não foi limpo (um bloqueio, um watchdog, uma quebra de alimentação, uma reserva de memória falhada), o relatório de saúde diz o motivo durante dez minutos; uma falha deixa o seu core dump para ver, descarregar ou apagar a partir do painel; as definições guardadas são copiadas antes de cada instalação de firmware e recuperadas se uma atualização as danificar; e um administrador pode pedir ao nó, através do servidor, um pacote de diagnóstico ou o seu registo com um token de utilização única.
+* **As opções de segurança do servidor:** a central aplica as opções que o servidor guarda para ela (`armor/alarm/<nó>/policy`) e cada uma pode ser fixada no próprio nó: o estado armado guardado fica atado às zonas e ao PIN, as mensagens de zona Zigbee do servidor podem ser desligadas e, se assinadas, são verificadas (assinatura com uma chave escrita no painel e um número de sequência que só aumenta). Testado num computador com os valores que o contrato e o servidor calculam; não executado numa placa.
 
 ## 🖼️ Capturas de ecrã
 
@@ -94,7 +95,7 @@ ARMOR-ALARM/
 **Requisitos:** um compilador de C++17 para os testes no computador, o contentor ESP-IDF 5.5.5 para compilar a imagem, uma placa ESP32-S3 (Ethernet com PoE ou Wi-Fi)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,098 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,690 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Veja o [desenho](docs/DESIGN.md), [como a central toma o lugar do servidor](docs/FAILOVER.md) e as [notas de segurança](docs/SAFETY.md).

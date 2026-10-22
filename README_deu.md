@@ -22,13 +22,13 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.3-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.4-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
 ---
 
-**Ehrlichkeitsprüfung - was heute läuft:** Es existiert der **Alarmkern** (was eine Zone ist, wie eine vom ADC gelesene verdrahtete Schleife zum Zustand wird, die Regeln der Zentrale: Scharfschalten, Verzögerungen, der Alarm, die Sirene, die PIN mit Sperre) und die darauf gebaute **Firmware des Knotens** (Einstellungen, Web-Panel, Nachrichten mit dem Server, die Brücke des Zigbee-Funkmoduls, ein Zigbee-Koordinator im Netzwerk, Relais, Bluetooth, signierte Updates), die für beide Platinen baut; der Kern, die Einstellungen, die Nachrichten und das Panel in einem echten Browser gegen einen Ersatzknoten werden auf einem Computer mit 477.588 Prüfungen in 6 Testprogrammen getestet. **Nichts lief auf einer Platine oder einer echten Anlage, keine Zone wurde verdrahtet und keine Sirene angeschlossen, die Zigbee-Kommunikation des Knotens mit einem Koordinator (lokal oder im Netzwerk) ist geschrieben und gegen einen Ersatzkoordinator getestet, lief aber nie gegen einen echten Koordinator oder Sensor, und dies ist keine zertifizierte Alarmanlage.**
+**Ehrlichkeitsprüfung - was heute läuft:** Es existiert der **Alarmkern** (was eine Zone ist, wie eine vom ADC gelesene verdrahtete Schleife zum Zustand wird, die Regeln der Zentrale: Scharfschalten, Verzögerungen, der Alarm, die Sirene, die PIN mit Sperre) und die darauf gebaute **Firmware des Knotens** (Einstellungen, Web-Panel, Nachrichten mit dem Server, die Brücke des Zigbee-Funkmoduls, ein Zigbee-Koordinator im Netzwerk, Relais, Bluetooth, signierte Updates), die für beide Platinen baut; der Kern, die Einstellungen, die Nachrichten und das Panel in einem echten Browser gegen einen Ersatzknoten werden auf einem Computer mit 486.690 Prüfungen in 14 Testprogrammen getestet. **Nichts lief auf einer Platine oder einer echten Anlage, keine Zone wurde verdrahtet und keine Sirene angeschlossen, die Zigbee-Kommunikation des Knotens mit einem Koordinator (lokal oder im Netzwerk) ist geschrieben und gegen einen Ersatzkoordinator getestet, lief aber nie gegen einen echten Koordinator oder Sensor, und dies ist keine zertifizierte Alarmanlage.**
 
 ---
 
@@ -36,9 +36,9 @@
 
 | | |
 |---|---|
-| Version | `0.4.3` |
+| Version | `0.4.4` |
 | Reifegrad | Funktionsfähig |
-| Tests | 486.098 Prüfungen in 13 Programmen (`ctest`) |
+| Tests | 486.690 Prüfungen in 14 Programmen (`ctest`) |
 | Technik | C++17 host-tested core; ESP-IDF 5.5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | Auf echter Hardware | Noch keiner: keine Platine, Zone, Sirene oder kein Zigbee-Koordinator angeschlossen (nur Computertests, der Build und das Panel im Browser) |
 
@@ -62,6 +62,7 @@
 * **Zustandsbericht:** etwa einmal pro Minute veröffentlicht der Knoten, wie lange er läuft und warum er zuletzt neu gestartet ist, seinen freien Speicher, seine Verbindung und sein WLAN-Signal, wie oft er sich mit dem Broker verbunden hat und den letzten protokollierten Fehler (`armor/health/<Knoten>`, der Vertrag `node_health` von ARMOR-COMMON). Der Code, der ihn erzeugt, wird von allen Knoten geteilt und auf einem Computer getestet; auf einer Platine ist er noch nicht gelaufen.
 * **Steuerung vom Server aus:** Studio kann den Knoten sauber neu starten, bis zu einer Stunde pausieren (er läuft von selbst weiter), seine Arbeit in den Standby setzen (ohne Ende, über Neustarts hinweg gespeichert, der Knoten bleibt verbunden und antwortet weiter), ihn sich zeigen lassen, einen Diagnose-Schnappschuss anfordern und ihn als in Wartung markieren (`armor/control/<Knoten>/...`, der Vertrag `node_control` von ARMOR-COMMON). Jeder Befehl besteht aus zwei Schritten mit einem Einmal-Token, das zu dieser Operation gehört; nur der Server darf sie am Broker schreiben, und es gibt kein Zurücksetzen auf Werkseinstellungen, kein Löschen und keinen Tiefschlaf. Solange der Knoten pausiert oder im Standby ist, werden seine Zonen nicht gelesen, nichts wird ausgewertet, scharf geschaltet oder ausgelöst, kein Zustand wird veröffentlicht und das Sirenenrelais bleibt offen: Das Haus ist NICHT geschützt, und der Gesundheitsbericht sagt es. Der Code wird von allen Knoten geteilt und auf einem Rechner getestet; auf einer Platine ist er noch nicht gelaufen.
 * **Diagnose ohne Kabel:** Nach einem unsauberen Start (Absturz, Watchdog, Spannungseinbruch, fehlgeschlagene Speicherreservierung) nennt der Gesundheitsbericht zehn Minuten lang den Grund; ein Absturz hinterlässt sein Core-Dump, das man im Panel ansehen, herunterladen oder löschen kann; die gespeicherten Einstellungen werden vor jeder Firmware-Installation kopiert und wiederhergestellt, falls ein Update sie beschädigt; und ein Administrator kann den Knoten über den Server mit einem Einmal-Token nach einem Diagnosepaket oder seinem Protokoll fragen.
+* **Die Sicherheitsoptionen des Servers:** Die Zentrale wendet die Optionen an, die der Server für sie führt (`armor/alarm/<Knoten>/policy`), und jede lässt sich am Knoten selbst festlegen: Der gespeicherte scharfe Zustand ist an Zonen und PIN gebunden, die Zigbee-Zonenmeldungen des Servers lassen sich abschalten und werden, wenn sie signiert sind, geprüft (Signatur mit einem im Panel eingegebenen Schlüssel und eine nur steigende Folgenummer). Auf einem Computer gegen die Werte getestet, die Vertrag und Server berechnen; nicht auf einem Board ausgeführt.
 
 ## 🖼️ Screenshots
 
@@ -94,7 +95,7 @@ ARMOR-ALARM/
 **Voraussetzungen:** ein C++17-Compiler für die Host-Tests, der ESP-IDF-5.5.5-Container zum Bauen des Images, eine ESP32-S3-Platine (PoE-Ethernet oder WLAN)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,098 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,690 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Siehe [den Entwurf](docs/DESIGN.md), [wie die Zentrale vom Server übernimmt](docs/FAILOVER.md) und die [Sicherheitshinweise](docs/SAFETY.md).

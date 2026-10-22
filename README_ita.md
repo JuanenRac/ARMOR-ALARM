@@ -22,13 +22,13 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.3-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.4-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
 ---
 
-**Controllo di onestà - cosa funziona oggi:** Ciò che esiste è il **nucleo dell'allarme** (cos'è una zona, come un anello cablato letto dall'ADC diventa uno stato, le regole della centrale: inserimento, ritardi, l'allarme, la sirena, il PIN con blocco) e il **firmware del nodo** costruito su di esso (impostazioni, pannello web, messaggi con il server, il ponte della radio Zigbee, un coordinatore Zigbee in rete, relè, Bluetooth, aggiornamenti firmati), che si compila per entrambe le schede; il nucleo, le impostazioni, i messaggi e il pannello in un vero browser contro un nodo sostitutivo sono provati su un computer con 477.588 controlli in 6 programmi di test. **Nulla ha girato su una scheda né su un impianto reale, nessuna zona è stata cablata né sirena collegata, la conversazione Zigbee del nodo con un coordinatore (locale o in rete) è scritta e provata contro un coordinatore sostitutivo ma non ha mai girato contro un coordinatore o un sensore reali, e questo non è un sistema d'allarme certificato.**
+**Controllo di onestà - cosa funziona oggi:** Ciò che esiste è il **nucleo dell'allarme** (cos'è una zona, come un anello cablato letto dall'ADC diventa uno stato, le regole della centrale: inserimento, ritardi, l'allarme, la sirena, il PIN con blocco) e il **firmware del nodo** costruito su di esso (impostazioni, pannello web, messaggi con il server, il ponte della radio Zigbee, un coordinatore Zigbee in rete, relè, Bluetooth, aggiornamenti firmati), che si compila per entrambe le schede; il nucleo, le impostazioni, i messaggi e il pannello in un vero browser contro un nodo sostitutivo sono provati su un computer con 486.690 controlli in 14 programmi di test. **Nulla ha girato su una scheda né su un impianto reale, nessuna zona è stata cablata né sirena collegata, la conversazione Zigbee del nodo con un coordinatore (locale o in rete) è scritta e provata contro un coordinatore sostitutivo ma non ha mai girato contro un coordinatore o un sensore reali, e questo non è un sistema d'allarme certificato.**
 
 ---
 
@@ -36,9 +36,9 @@
 
 | | |
 |---|---|
-| Versione | `0.4.3` |
+| Versione | `0.4.4` |
 | Maturità | Funzionale |
-| Test | 486.098 controlli in 13 programmi (`ctest`) |
+| Test | 486.690 controlli in 14 programmi (`ctest`) |
 | Tecnologia | C++17 host-tested core; ESP-IDF 5.5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | Su hardware reale | Ancora nessuno: nessuna scheda, zona, sirena o coordinatore Zigbee collegati (solo test su computer, la compilazione e il pannello in un browser) |
 
@@ -62,6 +62,7 @@
 * **Rapporto di salute:** circa una volta al minuto il nodo pubblica da quanto è acceso e perché si è riavviato l'ultima volta, la memoria libera, il collegamento e il segnale Wi-Fi, quante volte si è connesso al broker e l'ultimo errore registrato (`armor/health/<nodo>`, il contratto `node_health` di ARMOR-COMMON). Il codice che lo costruisce è condiviso da tutti i nodi e testato su un computer; non è mai girato su una scheda.
 * **Controllo dal server:** Studio può riavviare il nodo in modo pulito, metterlo in pausa fino a un'ora (riprende da solo), mettere il suo lavoro in standby (senza fine, conservato ai riavvii, il nodo resta connesso e continua a rispondere), farlo mostrare, chiedere un'istantanea diagnostica e segnarlo in manutenzione (`armor/control/<nodo>/...`, il contratto `node_control` di ARMOR-COMMON). Ogni ordine è in due passi con un token monouso legato a quell'operazione, solo il server può scriverli sul broker e non esistono ripristino di fabbrica, cancellazione né sonno profondo. Finché il nodo è in pausa o in standby le sue zone non vengono lette, nulla viene valutato, attivato o fatto suonare, nessuno stato viene pubblicato e il relè della sirena resta aperto: la casa NON è protetta, e il rapporto di salute lo dice. Il codice è condiviso da tutti i nodi e provato su un computer; non ha ancora girato su una scheda.
 * **Diagnostica senza cavo:** dopo un avvio non pulito (un blocco, un watchdog, un calo di alimentazione, un'allocazione fallita) il rapporto di salute ne indica la causa per dieci minuti; un arresto anomalo lascia il suo core dump da vedere, scaricare o cancellare dal pannello; le impostazioni salvate vengono copiate prima di ogni installazione del firmware e recuperate se un aggiornamento le danneggia; e un amministratore può chiedere al nodo, tramite il server, un pacchetto di diagnostica o il suo registro con un token monouso.
+* **Le opzioni di sicurezza del server:** la centrale applica le opzioni che il server tiene per lei (`armor/alarm/<nodo>/policy`) e ciascuna può essere fissata sul nodo stesso: lo stato inserito salvato è legato alle zone e al PIN, i messaggi di zona Zigbee del server possono essere spenti e, se firmati, vengono verificati (firma con una chiave digitata nel pannello e un numero di sequenza che può solo crescere). Provato su un computer con i valori che calcolano il contratto e il server; non eseguito su una scheda.
 
 ## 🖼️ Schermate
 
@@ -94,7 +95,7 @@ ARMOR-ALARM/
 **Requisiti:** un compilatore C++17 per i test sul computer, il container ESP-IDF 5.5.5 per compilare l'immagine, una scheda ESP32-S3 (Ethernet PoE o Wi-Fi)
 
 ```bash
-cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,098 checks: the rules, the settings, the messages, the runner and the update from GitHub
+cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,690 checks: the rules, the settings, the messages, the runner and the update from GitHub
 ```
 
 Vedi [il progetto](docs/DESIGN.md), [come la centrale subentra al server](docs/FAILOVER.md) e le [note di sicurezza](docs/SAFETY.md).
