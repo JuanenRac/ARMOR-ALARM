@@ -59,6 +59,16 @@ def check_panel_features(table, problems):
             problems.append(f"the panel has no text {key}")
     if '"system.login_limit_per_minute"' not in app:
         problems.append("the System page does not offer system.login_limit_per_minute")
+    if "server.zone_feed_key" in app:   # the options the server keeps for the panel, and the key of its zone messages
+        for key in ("panelSecurityTitle", "panelSecurityHelp", "panelOptHash", "panelOptFeed", "panelOptSignature", "choicePolicy", "choiceOn", "choiceOff", "panelFeedKey", "panelFeedKeyHint", "panelFeedKeySet", "panelFeedKeyClear"):
+            if key not in table:
+                problems.append(f"the panel has no text {key}")
+        if 'type: "password"' not in app.split("function feedKeyField(", 1)[-1][:600]:
+            problems.append("the key of the zone messages is not asked for in a password field")
+    if "relays." in app and "relayInterlock" in app:
+        for key in ("relayInterlock", "relayInterlockNone", "relayInterlockHint", "e_relay_interlocked"):
+            if key not in table:
+                problems.append(f"the panel has no text {key}")
     if '"voiceUrl"' in app and "192.168.0.180:18090" not in app:
         problems.append("the voice page suggests an address other than the port 18090 where ARMOR-VOICE-AI listens")
 
