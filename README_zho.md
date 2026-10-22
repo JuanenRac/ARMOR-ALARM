@@ -38,7 +38,7 @@
 |---|---|
 | 版本 | `0.4.3` |
 | 成熟度 | 可用 |
-| 测试 | 486,098 checks in 13 programs (`ctest`) |
+| 测试 | 13 个程序中的 486,098 项检查（`ctest`） |
 | 技术栈 | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | 真实硬件 | 暂无：没有连接板子、防区、警笛或 Zigbee 协调器（仅有计算机测试、构建和浏览器中的面板） |
 
@@ -91,7 +91,7 @@ ARMOR-ALARM/
 
 ## 🛠️ 开发环境
 
-**环境要求:** a C++17 compiler for the host tests, the ESP-IDF 5.4 container to build the image, an ESP32-S3 board (PoE Ethernet or Wi-Fi)
+**环境要求:** 用于主机测试的 C++17 编译器, 用于构建镜像的 ESP-IDF 5.4 容器, ESP32-S3 开发板（PoE 以太网或 Wi-Fi）
 
 ```bash
 cmake -S tests -B build/host && cmake --build build/host && ctest --test-dir build/host   # 486,098 checks: the rules, the settings, the messages, the runner and the update from GitHub
