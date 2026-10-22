@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.2-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.3-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,7 +36,7 @@
 
 | | |
 |---|---|
-| Versione | `0.4.2` |
+| Versione | `0.4.3` |
 | Maturità | Funzionale |
 | Test | 486,098 checks in 13 programs (`ctest`) |
 | Tecnologia | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
@@ -61,6 +61,7 @@
 * **Profili di inserimento:** un comando di inserimento può portare un profilo (Fuori casa, In casa, Notte, il tuo) che sceglie, per quell'inserimento, quali zone sorvegliano, quali fanno scattare l'allarme subito o dopo il ritardo d'ingresso, i ritardi di uscita e d'ingresso e se la sirena suona (un allarme silenzioso resta memorizzato, registrato e segnalato). Non tocca mai le zone di fumo, panico o manomissione, il PIN, il blocco, il silenziamento, un inserimento forzato né una zona in guasto; il profilo sopravvive a un riavvio e un inserimento senza profilo si comporta esattamente come prima. Provato contro le vecchie regole con un'esecuzione casuale e contro il contratto condiviso.
 * **Rapporto di salute:** circa una volta al minuto il nodo pubblica da quanto è acceso e perché si è riavviato l'ultima volta, la memoria libera, il collegamento e il segnale Wi-Fi, quante volte si è connesso al broker e l'ultimo errore registrato (`armor/health/<nodo>`, il contratto `node_health` di ARMOR-COMMON). Il codice che lo costruisce è condiviso da tutti i nodi e testato su un computer; non è mai girato su una scheda.
 * **Controllo dal server:** Studio può riavviare il nodo in modo pulito, metterlo in pausa fino a un'ora (riprende da solo), mettere il suo lavoro in standby (senza fine, conservato ai riavvii, il nodo resta connesso e continua a rispondere), farlo mostrare, chiedere un'istantanea diagnostica e segnarlo in manutenzione (`armor/control/<nodo>/...`, il contratto `node_control` di ARMOR-COMMON). Ogni ordine è in due passi con un token monouso legato a quell'operazione, solo il server può scriverli sul broker e non esistono ripristino di fabbrica, cancellazione né sonno profondo. Finché il nodo è in pausa o in standby le sue zone non vengono lette, nulla viene valutato, attivato o fatto suonare, nessuno stato viene pubblicato e il relè della sirena resta aperto: la casa NON è protetta, e il rapporto di salute lo dice. Il codice è condiviso da tutti i nodi e provato su un computer; non ha ancora girato su una scheda.
+* **Diagnostica senza cavo:** dopo un avvio non pulito (un blocco, un watchdog, un calo di alimentazione, un'allocazione fallita) il rapporto di salute ne indica la causa per dieci minuti; un arresto anomalo lascia il suo core dump da vedere, scaricare o cancellare dal pannello; le impostazioni salvate vengono copiate prima di ogni installazione del firmware e recuperate se un aggiornamento le danneggia; e un amministratore può chiedere al nodo, tramite il server, un pacchetto di diagnostica o il suo registro con un token monouso.
 
 ## 🖼️ Schermate
 

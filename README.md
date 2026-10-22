@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.2-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.3-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,7 +36,7 @@
 
 | | |
 |---|---|
-| Version | `0.4.2` |
+| Version | `0.4.3` |
 | Maturity | Functional |
 | Tests | 486,098 checks in 13 programs (`ctest`) |
 | Stack | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
@@ -61,6 +61,7 @@
 * **Arming profiles:** an arm command may carry a profile (Away, Home, Night, your own) that chooses, for that arming, which zones guard, which alarm at once or after the entry delay, the exit and entry delays and whether the siren sounds (a silent alarm is still latched, recorded and told). It never touches smoke, panic or tamper zones, the PIN, the lockout, the silence, a forced arming or a zone in trouble; the profile survives a restart, and an arm without one behaves exactly as before. Tested against the old rules with a random run and against the shared contract.
 * **Health report:** about once a minute the node publishes how long it has been up and why it last restarted, its free memory, its link and Wi-Fi signal, how many times it connected to the broker and the last error it logged (`armor/health/<node>`, the `node_health` contract of ARMOR-COMMON). The code that builds it is shared by every node and tested on a computer; it has not run on a board.
 * **Control from the server:** Studio can restart the node cleanly, pause it for up to an hour (it resumes by itself), put its work in standby (no end, kept across restarts, the node stays connected and keeps answering), make it show itself, ask for a diagnostics snapshot and mark it as in maintenance (`armor/control/<node>/...`, the `node_control` contract of ARMOR-COMMON). Every order takes two steps with a one-time token that belongs to that operation, only the server may write them on the broker, and there is no factory reset, no erase and no deep sleep. While the node is paused or in standby its zones are not read, nothing is evaluated, armed or sounded, no state is published and the siren relay is held open: the house is NOT protected, and the health report says so. The code is shared by every node and tested on a computer; it has not run on a board.
+* **Diagnostics without a cable:** after a start that was not clean (a crash, a watchdog, a sag of the supply, a failed allocation) the health report says why for ten minutes; a crash leaves its core dump to look at, download or erase from the panel; the stored settings are copied before every firmware install and recovered if an update damages them; and an administrator can ask the node, through the server, for a diagnostic package or its log with a one-time token.
 
 ## 🖼️ Screenshots
 

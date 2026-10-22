@@ -22,7 +22,7 @@
   <img src="https://img.shields.io/badge/Language-C%2B%2B17-00599c.svg" alt="Language">
   <img src="https://img.shields.io/badge/Zones-wired%20%2B%20Zigbee-ffb020.svg" alt="Zones">
   <img src="https://img.shields.io/badge/Checks-482%2C535-2ea44f.svg" alt="Checks">
-  <img src="https://img.shields.io/badge/Version-0.4.2-0f6cbd.svg" alt="Version">
+  <img src="https://img.shields.io/badge/Version-0.4.3-0f6cbd.svg" alt="Version">
   <img src="https://img.shields.io/badge/Maturity-functional-00E5FF.svg" alt="Maturity">
 </p>
 
@@ -36,7 +36,7 @@
 
 | | |
 |---|---|
-| Versión | `0.4.2` |
+| Versión | `0.4.3` |
 | Madurez | Funcional |
 | Tests | 486,098 checks in 13 programs (`ctest`) |
 | Tecnología | C++17 host-tested core; ESP-IDF 5.4 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
@@ -61,6 +61,7 @@
 * **Perfiles de armado:** un comando de armar puede llevar un perfil (Fuera, En casa, Noche, el tuyo) que elige, para ese armado, qué zonas vigilan, cuáles disparan la alarma al instante o tras el retardo de entrada, los retardos de salida y entrada y si suena la sirena (una alarma silenciosa se queda enganchada, anotada y avisada). Nunca toca las zonas de humo, pánico o sabotaje, el PIN, el bloqueo, el silencio, un armado forzado ni una zona con problema; el perfil sobrevive a un reinicio y un armado sin perfil se comporta exactamente como antes. Probado contra las reglas antiguas con una ejecución aleatoria y contra el contrato compartido.
 * **Informe de salud:** cada minuto más o menos el nodo publica cuánto lleva encendido y por qué se reinició la última vez, su memoria libre, su enlace y su señal Wi-Fi, cuántas veces se conectó al broker y el último error que anotó (`armor/health/<nodo>`, el contrato `node_health` de ARMOR-COMMON). El código que lo construye lo comparten todos los nodos y está probado en un ordenador; no se ha ejecutado en una placa.
 * **Control desde el servidor:** Studio puede reiniciar el nodo limpiamente, pausarlo hasta una hora (se reanuda solo), poner su trabajo en espera (sin fin, se conserva al reiniciar, el nodo sigue conectado y respondiendo), hacer que se muestre, pedirle una instantánea de diagnóstico y marcarlo en mantenimiento (`armor/control/<nodo>/...`, el contrato `node_control` de ARMOR-COMMON). Cada orden son dos pasos con un token de un solo uso que pertenece a esa operación, solo el servidor puede escribirlas en el broker, y no existe restablecimiento de fábrica, borrado ni sueño profundo. Mientras el nodo está en pausa o en espera no se leen sus zonas, no se evalúa, arma ni hace sonar nada, no se publica estado y el relé de la sirena se mantiene abierto: la casa NO está protegida, y el informe de salud lo dice. El código es compartido por todos los nodos y se prueba en un ordenador; no ha funcionado en una placa.
+* **Diagnóstico sin cable:** tras un arranque que no fue limpio (un cuelgue, un watchdog, una caída de la alimentación, una reserva de memoria fallida) el informe de salud dice el motivo durante diez minutos; un fallo deja su volcado de núcleo (core dump) para verlo, descargarlo o borrarlo desde el panel; los ajustes guardados se copian antes de cada instalación de firmware y se recuperan si una actualización los daña; y un administrador puede pedir al nodo, a través del servidor, un paquete de diagnóstico o su registro con un token de un solo uso.
 
 ## 🖼️ Capturas de pantalla
 
