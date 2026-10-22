@@ -30,6 +30,8 @@ The firmware's default limits (400, 1200 and 2400 mV) fit this circuit, but the 
 
 A relay of the base board (any of the eight, named in the panel) closes while the alarm sounds. The siren's own supply is the installer's (a 12 V siren from a battery that is kept charged); the relay's driver and contacts must be rated for it, with a flyback diode on an inductive load. Every relay starts open when the node starts; an alarm that was ringing when the node restarted rings again (see [SAFETY.md](SAFETY.md)), unless its siren had already timed out. The siren's relay belongs to the alarm: the panel's page, the broker and the central cannot move it, it does not fall back to open when the broker is lost, and its pin is written again on every turn of the loop.
 
+The relays of the base board can also be interlocked in pairs (a relay names another that must never be closed together with it; a request to close one while the other is closed is refused, `relay_interlocked`). The siren is the exception: the alarm closes its relay whatever an interlock says.
+
 ## Power
 
 Without power there is no alarm. The PoE switch, the router or access point and the panel need a battery backup (a UPS) for the alarm to survive a power cut; the siren's battery too. The node's supply is the PoE of its Ethernet cable.

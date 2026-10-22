@@ -177,6 +177,8 @@ try {
   check("a Zigbee zone says it has not been heard", (await text()).includes("not heard yet"), await ev(`[...document.querySelectorAll("section.card")].find(x => x.querySelector("h2")?.textContent.startsWith("Zone 3"))?.innerText`));
   await goto("io");
   body = await text();
+  check("each relay can be interlocked with another", body.includes("Never closed together with") && body.includes("No other relay"), body.slice(0, 300));
+  body = await text();
   check("the relays page has the siren note, the broker switch and eight relays", body.includes("is the siren") && body.includes("Let the broker move the relays") && [1, 2, 8].every(n => body.includes(`Relay ${n}`)) && !body.includes("Analog inputs"), body.slice(0, 300));
   check("the direct API for a central is offered with its token", body.includes("Let a central read and command this node over HTTP"));
   await ev(`(() => { const box = [...document.querySelectorAll('label')].find(l => l.textContent.includes('Let a central read')); box.querySelector('input').click(); })()`);

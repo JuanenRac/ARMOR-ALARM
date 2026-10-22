@@ -43,7 +43,7 @@ const config = {
   zigbee_local: { after_s: 0, sirens: [] },
   zigbee: { enabled: true, rx: 18, tx: 17, reset: 21, bootloader: 47, baud: 115200, port: 8888, allowed_client: "192.168.0.180", fallback_client: "", fallback_after_s: 30 },
   remote: { relays: false, link_timeout_s: 0, http: false, token_set: false },
-  relays: Array.from({ length: 8 }, (_, i) => ({ enabled: i < 2, name: ["siren", "lights"][i] ?? `relay${i + 1}`, label: ["Siren", "Hall lights"][i] ?? "", pin: wired ? [38, 39, 40, 41, 42, 43, 44, 48][i] : [38, 39, 40, 41, 42, 11, 12, 13][i], active_low: i === 1 })),
+  relays: Array.from({ length: 8 }, (_, i) => ({ enabled: i < 2, name: ["siren", "lights"][i] ?? `relay${i + 1}`, label: ["Siren", "Hall lights"][i] ?? "", pin: wired ? [38, 39, 40, 41, 42, 43, 44, 48][i] : [38, 39, 40, 41, 42, 11, 12, 13][i], active_low: i === 1 , interlock: "" })),
   time: { ntp_enabled: true, ntp: "pool.ntp.org", zone: "CET-1CEST,M3.5.0,M10.5.0/3" },
   system: { auto_restart_hours: 0, login_limit_per_minute: 30 },
   web: { mode: "both" },
@@ -123,6 +123,7 @@ const problems = doc => {
     if (!/^\d+\.\d+\.\d+\.\d+$/.test(doc.zigbee.allowed_client ?? "")) list.push({ path: "zigbee.allowed_client", code: doc.zigbee.allowed_client ? "invalid" : "required" });
     if (!(doc.zigbee.port >= 1024 && doc.zigbee.port <= 65535)) list.push({ path: "zigbee.port", code: "range" });
   }
+  (doc.relays ?? []).forEach((r, i) => { if (r.enabled !== false && r.interlock) { const names = config.relays.map((x, at) => (doc.relays[at]?.enabled ?? x.enabled) ? (doc.relays[at]?.name ?? x.name) : null); if (r.interlock === (r.name ?? config.relays[i].name)) list.push({ path: `relays.${i}.interlock`, code: "invalid" }); else if (!names.includes(r.interlock)) list.push({ path: `relays.${i}.interlock`, code: "unknown_relay" }); } });
   if (doc.remote?.relays && !(doc.mqtt?.enabled ?? config.mqtt.enabled)) list.push({ path: "remote.relays", code: "needs_broker" });
   if (doc.remote && doc.remote.link_timeout_s !== 0 && doc.remote.link_timeout_s !== undefined && doc.remote.link_timeout_s < 10) list.push({ path: "remote.link_timeout_s", code: "range" });
   const seen = new Set(), zigbeeSeen = new Set();
@@ -256,6 +257,8 @@ const server = createServer(async (request, response) => {
     const index = Number(route.slice(7)) - 1;
     if (typeof body.on !== "boolean" || !(index >= 0 && index < 8)) return json(response, 422, { error: "invalid" });
     if (!config.relays[index].enabled) return json(response, 409, { error: "relay_not_available" });
+    const mine = config.relays[index];
+    if (body.on && config.relays.some((other, at) => at !== index && other.enabled && relayOn.get(at) === true && ((mine.interlock && mine.interlock === other.name) || (other.interlock && other.interlock === mine.name)))) return json(response, 409, { error: "relay_interlocked" });
     relayOn.set(index, body.on);
     return json(response, 200, { ok: true, restart_required: false });
   }
