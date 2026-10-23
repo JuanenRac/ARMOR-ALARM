@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+- **How the node is wired together is decided in one place and tested on a computer** (`core/alarm_wiring.hpp`): how each zone is read (analog loop, digital contact, Zigbee sensor, not at all), whether the converter is started, whether the node creates the host of the Zigbee radio, which topics of the broker it listens to (the command topic only when the settings let the server command the panel) and which relay is the siren, which then belongs to the alarm alone. The alarm task asks it and does what it says, and the host tests check that its answers agree with what the settings check accepts and refuses.
 - The repository has a security policy, a code of conduct, a contributing guide and a support file.
 - The banner follows the animated style of the ecosystem banners, with the name, the kind and the technologies of the project.
 ## [0.4.4] - The server's security options applied by the panel, the zone feed checked, wrong passwords per minute as a setting and interlocked relays

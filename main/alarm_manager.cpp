@@ -24,6 +24,7 @@ extern "C" {
 }
 #include "clock_sync.hpp"
 #include "core/alarm_supervisor.hpp"
+#include "core/alarm_wiring.hpp"
 #include "core/local_zigbee.hpp"
 #include "entropy.hpp"
 #include "mqtt_link.hpp"
@@ -41,6 +42,7 @@ constexpr int kSamples = 8;                       // readings averaged for one v
 std::mutex g_lock;
 std::unique_ptr<alarm::Supervisor> g_sup;   // the panel and the decisions around it (core/alarm_supervisor.hpp)
 config::Settings g_settings;
+alarm::Wiring g_wiring;                     // how the settings are wired together (core/alarm_wiring.hpp); set once at start, before the task exists
 Publish g_publish;
 std::string g_error;
 int g_siren_relay = -1;
@@ -194,8 +196,7 @@ void alarm_task(void*) {
   unit_config.unit_id = ADC_UNIT_1;
   std::array<adc_cali_handle_t, config::kZoneCount> calibration{};
   std::array<bool, config::kZoneCount> ready{};
-  bool any_zone = false;
-  for (const config::ZoneSetting& zone : g_settings.zones) any_zone = any_zone || (zone.enabled && !zone.is_zigbee() && !zone.is_digital());   // a Zigbee zone has no pin, a digital one is not read by the ADC
+  const bool any_zone = g_wiring.needs_converter;   // a Zigbee zone has no pin, a digital one is not read by the converter
   // the digital pins: inputs with the internal pull-up (a closed contact pulls the pin to ground)
   const auto input_with_pullup = [](int pin, const char* what) {
     gpio_config_t io{};
@@ -207,8 +208,8 @@ void alarm_task(void*) {
   };
   std::array<bool, config::kZoneCount> digital_ready{};
   std::array<bool, config::kButtonCount> button_ready{};
-  for (std::size_t i = 0; i < config::kZoneCount; ++i) if (g_settings.zones[i].enabled && g_settings.zones[i].is_digital()) digital_ready[i] = input_with_pullup(g_settings.zones[i].pin, "a zone");
-  for (std::size_t i = 0; i < config::kButtonCount; ++i) if (g_settings.buttons[i].enabled) button_ready[i] = input_with_pullup(g_settings.buttons[i].pin, "a button");
+  for (std::size_t i = 0; i < config::kZoneCount; ++i) if (g_wiring.zones[i] == alarm::ZoneInput::kDigital) digital_ready[i] = input_with_pullup(g_settings.zones[i].pin, "a zone");
+  for (std::size_t i = 0; i < config::kButtonCount; ++i) if (g_wiring.buttons[i]) button_ready[i] = input_with_pullup(g_settings.buttons[i].pin, "a button");
   if (any_zone) {
     if (adc_oneshot_new_unit(&unit_config, &unit) != ESP_OK) {
       ESP_LOGE(kTag, "the converter could not be started: the zones are not read");
@@ -218,7 +219,7 @@ void alarm_task(void*) {
     } else {
       for (std::size_t i = 0; i < config::kZoneCount; ++i) {
         const config::ZoneSetting& zone = g_settings.zones[i];
-        if (!zone.enabled || zone.is_zigbee() || zone.is_digital()) continue;
+        if (g_wiring.zones[i] != alarm::ZoneInput::kAnalogLoop) continue;
         const adc_channel_t channel = static_cast<adc_channel_t>(board::adc1_channel(zone.pin));
         adc_oneshot_chan_cfg_t channel_config{};
         channel_config.atten = ADC_ATTEN_DB_12;
@@ -252,7 +253,7 @@ void alarm_task(void*) {
     if (unit != nullptr) {
       std::lock_guard<std::mutex> adc_guard(armor::adc_lock());   // nobody else touches the converter while the zones are read (see entropy.cpp)
       for (std::size_t i = 0; i < config::kZoneCount; ++i) {
-        if (!g_settings.zones[i].enabled || g_settings.zones[i].is_zigbee() || g_settings.zones[i].is_digital() || !ready[i]) continue;
+        if (g_wiring.zones[i] != alarm::ZoneInput::kAnalogLoop || !ready[i]) continue;
         const adc_channel_t channel = static_cast<adc_channel_t>(board::adc1_channel(g_settings.zones[i].pin));
         long sum = 0;
         int taken = 0;
@@ -269,7 +270,7 @@ void alarm_task(void*) {
     g_sup->runner().set_epoch(wall_epoch());
     for (std::size_t i = 0; i < config::kZoneCount; ++i) {
       if (read[i]) g_sup->runner().feed(i, millivolts[i], now);
-      else if (g_settings.zones[i].enabled && !g_settings.zones[i].is_zigbee() && !g_settings.zones[i].is_digital()) g_sup->runner().feed_unreadable(i, now);   // a loop nobody can read is not a closed one
+      else if (g_wiring.zones[i] == alarm::ZoneInput::kAnalogLoop) g_sup->runner().feed_unreadable(i, now);   // a loop nobody can read is not a closed one
     }
     for (std::size_t i = 0; i < config::kZoneCount; ++i) if (digital_ready[i]) g_sup->runner().feed_digital(i, gpio_get_level(static_cast<gpio_num_t>(g_settings.zones[i].pin)) != 0, now);
     bool pressed = false;
@@ -339,17 +340,19 @@ void start(const config::Settings& settings, Publish publish) {
       case alarm::BootResult::kNothingSaved: case alarm::BootResult::kStateNotArmed: break;
     }
   }
-  g_siren_relay = settings.panel.siren_relay.empty() ? -1 : relay_outputs::index_of(settings.panel.siren_relay);
-  if (g_siren_relay >= 0) relay_outputs::reserve_for_siren(static_cast<std::size_t>(g_siren_relay));
-  if (!settings.panel.siren_relay.empty() && g_siren_relay < 0) ESP_LOGE(kTag, "the siren relay \"%s\" is not an enabled relay: there is no siren", settings.panel.siren_relay.c_str());
-  if (settings.zigbee_local.after_s != 0 && (settings.zigbee.enabled || !settings.zigbee.network_host.empty())) {   // the radio on the board or a coordinator on the network
+  // What is wired to what is decided in core/alarm_wiring.hpp (tested on a computer); this only does it.
+  g_wiring = alarm::plan_wiring(settings, [](const std::string& name) { return relay_outputs::index_of(name); });
+  g_siren_relay = g_wiring.siren_relay;
+  if (g_wiring.reserve_siren_relay) relay_outputs::reserve_for_siren(static_cast<std::size_t>(g_siren_relay));
+  if (g_wiring.siren_relay_unknown) ESP_LOGE(kTag, "the siren relay \"%s\" is not an enabled relay: there is no siren", settings.panel.siren_relay.c_str());
+  if (g_wiring.takes_radio) {   // the radio on the board or a coordinator on the network
     g_host = std::make_unique<ZigbeeHost>(settings);
-    zigbee_bridge::set_local_host(g_host.get(), static_cast<unsigned>(settings.zigbee_local.after_s));
-    ESP_LOGI(kTag, "the node takes the Zigbee radio itself after %d s without the server's client", settings.zigbee_local.after_s);
+    zigbee_bridge::set_local_host(g_host.get(), g_wiring.radio_after_s);
+    ESP_LOGI(kTag, "the node takes the Zigbee radio itself after %u s without the server's client", g_wiring.radio_after_s);
   }
-  mqtt_link::subscribe(alarm::topic(settings.node_id, "zigbee"), on_zone_feed);
-  mqtt_link::subscribe(alarm::topic(settings.node_id, "policy"), on_policy);
-  if (settings.server.commands) {
+  if (g_wiring.listens_zone_feed) mqtt_link::subscribe(alarm::topic(settings.node_id, "zigbee"), on_zone_feed);
+  if (g_wiring.listens_policy) mqtt_link::subscribe(alarm::topic(settings.node_id, "policy"), on_policy);
+  if (g_wiring.listens_command) {
     mqtt_link::subscribe(alarm::topic(settings.node_id, "command"), on_command);
     ESP_LOGI(kTag, "the server may arm, disarm and silence the panel (armor/alarm/%s/command)", settings.node_id.c_str());
   }
