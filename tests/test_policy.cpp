@@ -273,6 +273,14 @@ static void test_the_pin_to_disarm() {
   CHECK(alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"always\"}", back) && back.disarm_pin == alarm::DisarmPin::kAlways);
   CHECK(alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false}", back) && back.disarm_pin == alarm::DisarmPin::kIfSet);   // a message without it says "if_set" again
   CHECK(alarm::policy_text(back) == "{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false}");                                                   // and is written as the older form
+  // the server asking for the stored secrets to be sealed: optional, only the word "secrets", kept in the canonical form, and a message without it means off
+  CHECK(alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"nvs_encryption\":\"secrets\"}", back) && back.seal_secrets && back.disarm_pin == alarm::DisarmPin::kIfSet);
+  CHECK(alarm::policy_text(back) == "{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"nvs_encryption\":\"secrets\"}");
+  CHECK(alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"never\",\"nvs_encryption\":\"secrets\"}", back) && back.seal_secrets && back.disarm_pin == alarm::DisarmPin::kNever);
+  CHECK(alarm::parse_policy(alarm::policy_text(back), policy) && policy.seal_secrets && policy.disarm_pin == alarm::DisarmPin::kNever);
+  CHECK(alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false}", back) && !back.seal_secrets);
+  { alarm::Policy kept; kept.seal_secrets = true; CHECK(!alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"nvs_encryption\":\"all\"}", kept) && kept.seal_secrets);
+    CHECK(!alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"nvs_encryption\":true}", kept) && !alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"nvs_encryption\":\"off\"}", kept) && kept.seal_secrets); }
   CHECK(alarm::parse_disarm_pin("if_set", back.disarm_pin) && !alarm::parse_disarm_pin("IF_SET", back.disarm_pin) && !alarm::parse_disarm_pin("", back.disarm_pin));
   // the node's own choice beats the server's
   config::ServerLink link;

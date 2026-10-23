@@ -30,6 +30,7 @@ extern "C" {
 #include "mqtt_link.hpp"
 #include "node_guard.hpp"
 #include "node_control.hpp"
+#include "node_store.hpp"
 #include "relay_outputs.hpp"
 #include "zigbee_bridge.hpp"
 
@@ -183,6 +184,11 @@ void on_policy(const std::string&, const std::string& payload) {
   {
     std::lock_guard<std::mutex> guard(g_lock);
     if (!g_sup || !g_sup->on_policy(payload, to_write)) { ESP_LOGW(kTag, "a message on the policy topic was ignored: it is not the contract's policy"); return; }
+  }
+  {
+    bool seal = false;
+    { std::lock_guard<std::mutex> guard(g_lock); seal = g_sup->runner().policy().seal_secrets; }
+    store::seal_server_request(seal);   // the server asking for the secrets to be sealed (nodes.nvs_encryption); the node's own setting can only add to it
   }
   if (!to_write.empty() && write_key(kPolicyKey, to_write)) {
     { std::lock_guard<std::mutex> guard(g_lock); g_sup->policy_written(to_write); }

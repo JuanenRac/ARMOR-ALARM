@@ -46,6 +46,7 @@ const config = {
   relays: Array.from({ length: 8 }, (_, i) => ({ enabled: i < 2, name: ["siren", "lights"][i] ?? `relay${i + 1}`, label: ["Siren", "Hall lights"][i] ?? "", pin: wired ? [38, 39, 40, 41, 42, 43, 44, 48][i] : [38, 39, 40, 41, 42, 11, 12, 13][i], active_low: i === 1 , interlock: "" })),
   time: { ntp_enabled: true, ntp: "pool.ntp.org", zone: "CET-1CEST,M3.5.0,M10.5.0/3" },
   system: { auto_restart_hours: 0, login_limit_per_minute: 30 },
+  security: { seal_secrets: false },
   web: { mode: "both" },
   ble: { mode: "setup" },
   ui: { language: "en" },

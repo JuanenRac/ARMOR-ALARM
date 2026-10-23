@@ -34,22 +34,26 @@ struct Policy {
   bool config_hash = false;       // not tied to the configuration until the server says so
   bool zone_feed = true;
   bool zone_feed_signature = false;
+  bool seal_secrets = false;      // the server asks the node to keep the secrets it stores sealed (nodes.nvs_encryption "secrets"); absent in its message means off
   bool heard = false;             // the server has said it (or it was read back from flash)
 };
 
 // The server's message, strictly: the three options each a true/false and, optionally, "disarm_pin" with one of its three words (left out when it is "if_set", so a message of the older form is the
-// same as one that says "if_set"). Anything else changes nothing.
+// same as one that says "if_set") and "nvs_encryption" with the word "secrets" (left out while the option is off). Anything else changes nothing.
 inline bool parse_policy(const std::string& text, Policy& out) {
   json::Value document;
   if (text.size() > 256 || !json::parse(text, document) || !document.is_object()) return false;
   const json::Value* pin = document.get("disarm_pin");
-  if (document.names.size() != (pin == nullptr ? 3u : 4u)) return false;
+  const json::Value* encryption = document.get("nvs_encryption");
+  if (document.names.size() != 3u + (pin != nullptr ? 1u : 0u) + (encryption != nullptr ? 1u : 0u)) return false;
   const json::Value* hash = document.get("config_hash");
   const json::Value* feed = document.get("zone_feed");
   const json::Value* signature = document.get("zone_feed_signature");
   if (hash == nullptr || !hash->is_bool() || feed == nullptr || !feed->is_bool() || signature == nullptr || !signature->is_bool()) return false;
   DisarmPin disarm_pin = DisarmPin::kIfSet;
   if (pin != nullptr && (!pin->is_string() || !parse_disarm_pin(pin->text, disarm_pin))) return false;
+  if (encryption != nullptr && (!encryption->is_string() || encryption->text != "secrets")) return false;
+  out.seal_secrets = encryption != nullptr;
   out.config_hash = hash->boolean;
   out.zone_feed = feed->boolean;
   out.zone_feed_signature = signature->boolean;
@@ -63,6 +67,7 @@ inline std::string policy_text(const Policy& policy) {
   json::Writer w;
   w.begin_object().field("config_hash", policy.config_hash).field("zone_feed", policy.zone_feed).field("zone_feed_signature", policy.zone_feed_signature);
   if (policy.disarm_pin != DisarmPin::kIfSet) w.field("disarm_pin", disarm_pin_text(policy.disarm_pin));
+  if (policy.seal_secrets) w.field("nvs_encryption", "secrets");
   w.end_object();
   return w.str();
 }
