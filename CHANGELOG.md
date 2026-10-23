@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## [Unreleased]
+## [0.4.5] - Zone wiring in the core, pin notes and optional sealing of secrets
 
 - **The secrets the node stores can be kept sealed (optional, off by default):** the setting `security.seal_secrets` (in the panel, with its explanation in the eight languages) seals the passwords, tokens, keys, PINs and password hashes in flash with ChaCha20-Poly1305 (`core/secret_seal.hpp`, checked against the RFC vectors) and leaves everything else readable; turning it on or off rewrites the stored values one by one with nothing lost, even if the node stops half-way. The key is a record in the new `nvs_keys` partition: no eFuse is burned and the flash is not encrypted, so it does not protect against someone who holds the board, and a node installed with the earlier partition table keeps its secrets as they were. Tests on a computer cover the cipher, the settings in both directions and a stop in the middle.
 - **The server's request to seal the secrets is understood:** the policy message may carry `nvs_encryption: "secrets"`; before, a message with that member was ignored whole. The node's own setting can add to the request, never lower it.
