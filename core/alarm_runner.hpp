@@ -131,9 +131,12 @@ class Runner {
 
   // From the panel's own page: arming needs no PIN, disarming does. (The panel's page arms without a profile; the server's command may carry one.)
   Refusal arm(Mode mode, bool force, std::uint64_t now_ms) { return arm_checked(mode, force, now_ms, nullptr); }
-  Refusal disarm(const std::string& pin, std::uint64_t now_ms) { return panel_.disarm(pin, now_ms); }
+  // With the PIN not asked (the server's alarm.disarm_pin is "never", or this panel was told so) the PIN is neither read nor counted, and nobody is locked out.
+  Refusal disarm(const std::string& pin, std::uint64_t now_ms) { return effective().pin_asked() ? panel_.disarm(pin, now_ms) : panel_.disarm_authorized(now_ms); }
   // Silences the siren with the system still armed: needs the PIN, like disarming.
-  Refusal silence(const std::string& pin, std::uint64_t now_ms) { return panel_.silence(pin, now_ms); }
+  Refusal silence(const std::string& pin, std::uint64_t now_ms) { return effective().pin_asked() ? panel_.silence(pin, now_ms) : panel_.silence_authorized(now_ms); }
+  // Whether the panel's page and the central's API ask for the PIN to disarm or silence.
+  bool pin_asked() const { return effective().pin_asked(); }
 
   // The state of a Zigbee zone as the server tells it. It counts only while the server holds the radio: when this node holds it, the node hears the sensors itself and what the server says
   // would be older than what it hears. A message that is not the contract's, or for a zone that is not a Zigbee one, changes nothing. True when it was taken.

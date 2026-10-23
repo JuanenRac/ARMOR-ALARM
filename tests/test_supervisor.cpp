@@ -181,7 +181,7 @@ static void test_policy_message() {
   alarm::Supervisor sup(house());
   std::string to_write;
   CHECK(!sup.on_policy("{}", to_write) && to_write.empty());
-  CHECK(!sup.on_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"never\"}", to_write));   // the node has no option for the PIN of the server's users
+  CHECK(!sup.on_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"sometimes\"}", to_write));   // not one of the PIN's three words
   CHECK(!sup.runner().effective().config_hash);
   CHECK(sup.on_policy(kHashOn, to_write) && to_write == "{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false}");
   CHECK(sup.runner().effective().config_hash);

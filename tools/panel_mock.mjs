@@ -39,7 +39,7 @@ const config = {
   buttons: Array.from({ length: 4 }, () => ({ enabled: false, action: "arm_away", pin: -1 })),
   loop: { short_below_mv: 400, normal_below_mv: 1200, triggered_below_mv: 2400 },
   panel: { exit_delay_s: 10, entry_delay_s: 10, siren_max_s: 60, lockout_after: 3, lockout_s: 30, siren_relay: "siren", pin_set: true },
-  server: { commands: false, config_hash: "policy", zone_feed: "policy", zone_signature: "policy", zone_feed_key_set: false },
+  server: { commands: false, config_hash: "policy", zone_feed: "policy", zone_signature: "policy", disarm_pin: "policy", zone_feed_key_set: false },
   zigbee_local: { after_s: 0, sirens: [] },
   zigbee: { enabled: true, rx: 18, tx: 17, reset: 21, bootloader: 47, baud: 115200, port: 8888, allowed_client: "192.168.0.180", fallback_client: "", fallback_after_s: 30 },
   remote: { relays: false, link_timeout_s: 0, http: false, token_set: false },
@@ -147,6 +147,7 @@ const problems = doc => {
   if ((doc.zones ?? config.zones).some(z => z.enabled) && doc.panel && doc.panel.pin !== undefined && doc.panel.pin !== "" && !/^\d{4,12}$/.test(doc.panel.pin)) list.push({ path: "panel.pin", code: "invalid" });
   if (doc.server?.commands && !(doc.mqtt?.enabled ?? config.mqtt.enabled)) list.push({ path: "server.commands", code: "needs_broker" });
   for (const name of ["config_hash", "zone_feed", "zone_signature"]) if (doc.server?.[name] !== undefined && !["policy", "on", "off"].includes(doc.server[name])) list.push({ path: "server." + name, code: "invalid" });
+  if (doc.server?.disarm_pin !== undefined && !["policy", "never", "if_set", "always"].includes(doc.server.disarm_pin)) list.push({ path: "server.disarm_pin", code: "invalid" });
   if (doc.server?.zone_feed_key !== undefined && doc.server.zone_feed_key !== "" && !/^[0-9a-f]{64}$/.test(doc.server.zone_feed_key)) list.push({ path: "server.zone_feed_key", code: "invalid" });
   return list;
 };

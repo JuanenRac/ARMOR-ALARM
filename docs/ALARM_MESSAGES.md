@@ -57,13 +57,14 @@ When the server signs its feed, each message also carries `seq` (a number that o
 
 ## The server's security options
 
-`armor/alarm/{node_id}/policy`: JSON, never retained, from the server to the panel (said again every thirty seconds): `{"config_hash":true,"zone_feed":true,"zone_feed_signature":false}`, exactly those three flags. The panel keeps the last one it heard in flash, so it applies it from its first moment after a restart, and until the server has spoken it does what it always did.
+`armor/alarm/{node_id}/policy`: JSON, never retained, from the server to the panel (said again every thirty seconds): `{"config_hash":true,"zone_feed":true,"zone_feed_signature":false}`: those three flags and, only when it is not `if_set`, a fourth member `"disarm_pin"`. The panel keeps the last one it heard in flash, so it applies it from its first moment after a restart, and until the server has spoken it does what it always did.
 
 - `config_hash`: the saved armed state is tied to a hash of the zones (which, where, how) and the PIN it was saved under, and is not given back after a restart if either changed (the panel then starts disarmed and says why in its log). A state saved before the option was on has no hash and comes back as before.
 - `zone_feed`: off, and the messages above are ignored.
 - `zone_feed_signature`: on, and an unsigned message, or a signed one that cannot be checked because the panel holds no key, is refused.
+- `disarm_pin` (`never`, `if_set` or `always`; absent means `if_set`): what the panel asks for to disarm or to silence the siren from its own page or through its API. `if_set` and `always` ask for the PIN exactly as the panel always did (a panel with zones always has one). `never` asks for none: the PIN is not read, a wrong one is not counted and nobody is locked out, and the person must still be signed in as an administrator; the server's own commands over the broker never needed it. A panel from before this option ignores a message that carries it.
 
-Each of the three can also be fixed on the node itself (Delays and PIN page, "Security options of the server"): *Follow the server* (the default), *On* or *Off*, whatever the server says. A signature required on the node needs the key to be stored. The broker lets a node read this topic only if its account says so: a node made after this version has the line, and one made before gets it with `mqtt_identity.sh alarm-policy <node>` (ARMOR-DEVOPS).
+Each option can also be fixed on the node itself (Delays and PIN page, "Security options of the server"): *Follow the server* (the default), *On* or *Off* for the flags and *Never ask for it*, *Ask for it* or *Always ask for it* for the PIN, whatever the server says (so a message on the broker cannot lower what is fixed on the node). A signature required on the node needs the key to be stored. The broker lets a node read this topic only if its account says so: a node made after this version has the line, and one made before gets it with `mqtt_identity.sh alarm-policy <node>` (ARMOR-DEVOPS).
 
 ## The arming profile
 

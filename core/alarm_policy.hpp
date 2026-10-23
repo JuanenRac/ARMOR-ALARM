@@ -2,8 +2,9 @@
 // checks of the server's zone messages (the signature and the sequence number). Pure: no hardware, all tested on a computer.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
-// The server tells the panel its options on armor/alarm/<node>/policy ({"config_hash":..,"zone_feed":..,"zone_feed_signature":..}, ARMOR-COMMON's alarm_policy). Every option can also be fixed on the
-// node (server.config_hash, server.zone_feed, server.zone_signature: "policy", "on" or "off"). What the node does when the server has never spoken is what it always did: restore the saved state
+// The server tells the panel its options on armor/alarm/<node>/policy ({"config_hash":..,"zone_feed":..,"zone_feed_signature":..} and, when the administrator did not leave it at "if_set",
+// "disarm_pin": "never" | "always", ARMOR-COMMON's alarm_policy). Every option can also be fixed on the node (server.config_hash, server.zone_feed, server.zone_signature: "policy", "on" or "off";
+// server.disarm_pin: "policy", "never", "if_set" or "always"). What the node does when the server has never spoken is what it always did: restore the saved state
 // without a hash, take the zone messages, accept an unsigned one.
 #pragma once
 #include <cstdint>
@@ -16,40 +17,65 @@
 
 namespace armor::alarm {
 
+// What is asked of whoever disarms the panel or silences its siren from the panel's own page or the central's API. A panel with zones always has a PIN (the configuration refuses zones without
+// one), so "if_set" and "always" ask for it exactly as the panel always did; "never" asks for none, counts no wrong PIN and so locks nobody out (the person must still be signed in as an administrator).
+enum class DisarmPin { kIfSet, kNever, kAlways };
+inline const char* disarm_pin_text(DisarmPin v) { return v == DisarmPin::kNever ? "never" : v == DisarmPin::kAlways ? "always" : "if_set"; }
+inline bool parse_disarm_pin(const std::string& text, DisarmPin& out) {
+  if (text == "never") out = DisarmPin::kNever;
+  else if (text == "if_set") out = DisarmPin::kIfSet;
+  else if (text == "always") out = DisarmPin::kAlways;
+  else return false;
+  return true;
+}
+
 struct Policy {
+  DisarmPin disarm_pin = DisarmPin::kIfSet;   // what the server last said; absent in its message means "if_set"
   bool config_hash = false;       // not tied to the configuration until the server says so
   bool zone_feed = true;
   bool zone_feed_signature = false;
   bool heard = false;             // the server has said it (or it was read back from flash)
 };
 
-// The server's message, strictly: exactly the three options and each a true/false. Anything else changes nothing.
+// The server's message, strictly: the three options each a true/false and, optionally, "disarm_pin" with one of its three words (left out when it is "if_set", so a message of the older form is the
+// same as one that says "if_set"). Anything else changes nothing.
 inline bool parse_policy(const std::string& text, Policy& out) {
   json::Value document;
-  if (text.size() > 256 || !json::parse(text, document) || !document.is_object() || document.names.size() != 3) return false;
+  if (text.size() > 256 || !json::parse(text, document) || !document.is_object()) return false;
+  const json::Value* pin = document.get("disarm_pin");
+  if (document.names.size() != (pin == nullptr ? 3u : 4u)) return false;
   const json::Value* hash = document.get("config_hash");
   const json::Value* feed = document.get("zone_feed");
   const json::Value* signature = document.get("zone_feed_signature");
   if (hash == nullptr || !hash->is_bool() || feed == nullptr || !feed->is_bool() || signature == nullptr || !signature->is_bool()) return false;
+  DisarmPin disarm_pin = DisarmPin::kIfSet;
+  if (pin != nullptr && (!pin->is_string() || !parse_disarm_pin(pin->text, disarm_pin))) return false;
   out.config_hash = hash->boolean;
   out.zone_feed = feed->boolean;
   out.zone_feed_signature = signature->boolean;
+  out.disarm_pin = disarm_pin;
   out.heard = true;
   return true;
 }
 
+// The canonical form kept in flash: the message of the older form while "disarm_pin" is "if_set", so a panel updated with nothing new to keep writes nothing new.
 inline std::string policy_text(const Policy& policy) {
   json::Writer w;
-  w.begin_object().field("config_hash", policy.config_hash).field("zone_feed", policy.zone_feed).field("zone_feed_signature", policy.zone_feed_signature).end_object();
+  w.begin_object().field("config_hash", policy.config_hash).field("zone_feed", policy.zone_feed).field("zone_feed_signature", policy.zone_feed_signature);
+  if (policy.disarm_pin != DisarmPin::kIfSet) w.field("disarm_pin", disarm_pin_text(policy.disarm_pin));
+  w.end_object();
   return w.str();
 }
 
 // What the node does now: the server's last word where the node leaves the option to it, the node's own choice where it fixed it.
 struct Effective {
   bool config_hash = false, zone_feed = true, signature_required = false;
+  DisarmPin disarm_pin = DisarmPin::kIfSet;
+  bool pin_asked() const { return disarm_pin != DisarmPin::kNever; }
 };
 inline Effective effective(const config::ServerLink& link, const Policy& policy) {
   Effective out;
+  out.disarm_pin = link.disarm_pin == config::PinChoice::kPolicy ? policy.disarm_pin : link.disarm_pin == config::PinChoice::kNever ? DisarmPin::kNever : link.disarm_pin == config::PinChoice::kAlways ? DisarmPin::kAlways : DisarmPin::kIfSet;
   out.config_hash = link.config_hash == config::Choice::kPolicy ? policy.config_hash : link.config_hash == config::Choice::kOn;
   out.zone_feed = link.zone_feed == config::Choice::kPolicy ? policy.zone_feed : link.zone_feed == config::Choice::kOn;
   // The server's wish for signed messages binds a panel only once it holds the key to check them with: before that the panel cannot tell a good signature from a bad one, and refusing the whole feed

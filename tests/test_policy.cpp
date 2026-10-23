@@ -93,9 +93,11 @@ static void test_the_policy_message_is_strict() {
   alarm::Policy untouched;
   CHECK(!alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true}", untouched) && !untouched.heard);                                       // an option missing
   CHECK(!alarm::parse_policy("{\"config_hash\":\"yes\",\"zone_feed\":true,\"zone_feed_signature\":false}", untouched));                           // not a flag
-  CHECK(!alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"never\"}", untouched));   // an option that does not exist
+  CHECK(!alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"colour\":\"red\"}", untouched));   // an option that does not exist
   CHECK(!alarm::parse_policy("[]", untouched) && !alarm::parse_policy("nope", untouched) && !alarm::parse_policy("{\"config_hash\":true,\"config_hash\":false,\"zone_feed\":true}", untouched));
   CHECK(!untouched.heard);
+  CHECK(!alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"sometimes\"}", untouched));   // not one of the three words
+  CHECK(!alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":true}", untouched) && !untouched.heard);
   CHECK(alarm::policy_text(policy) == "{\"config_hash\":true,\"zone_feed\":false,\"zone_feed_signature\":true}");
   alarm::Policy back;
   CHECK(alarm::parse_policy(alarm::policy_text(policy), back) && back.config_hash == policy.config_hash && back.zone_feed == policy.zone_feed);
@@ -260,6 +262,92 @@ static void test_the_runner_obeys_the_options() {
   }
 }
 
+static void test_the_pin_to_disarm() {
+  // the message of the older form says nothing about the PIN: "if_set", which is what the panel always did
+  alarm::Policy policy;
+  CHECK(policy.disarm_pin == alarm::DisarmPin::kIfSet);
+  CHECK(alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"never\"}", policy) && policy.disarm_pin == alarm::DisarmPin::kNever && policy.heard);
+  CHECK(alarm::policy_text(policy) == "{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"never\"}");
+  alarm::Policy back;
+  CHECK(alarm::parse_policy(alarm::policy_text(policy), back) && back.disarm_pin == alarm::DisarmPin::kNever);
+  CHECK(alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"always\"}", back) && back.disarm_pin == alarm::DisarmPin::kAlways);
+  CHECK(alarm::parse_policy("{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false}", back) && back.disarm_pin == alarm::DisarmPin::kIfSet);   // a message without it says "if_set" again
+  CHECK(alarm::policy_text(back) == "{\"config_hash\":true,\"zone_feed\":true,\"zone_feed_signature\":false}");                                                   // and is written as the older form
+  CHECK(alarm::parse_disarm_pin("if_set", back.disarm_pin) && !alarm::parse_disarm_pin("IF_SET", back.disarm_pin) && !alarm::parse_disarm_pin("", back.disarm_pin));
+  // the node's own choice beats the server's
+  config::ServerLink link;
+  alarm::Policy never;
+  never.heard = true; never.disarm_pin = alarm::DisarmPin::kNever;
+  CHECK(alarm::effective(link, never).disarm_pin == alarm::DisarmPin::kNever && !alarm::effective(link, never).pin_asked());
+  link.disarm_pin = config::PinChoice::kIfSet;
+  CHECK(alarm::effective(link, never).disarm_pin == alarm::DisarmPin::kIfSet && alarm::effective(link, never).pin_asked());   // a message of the broker does not lower what is fixed here
+  link.disarm_pin = config::PinChoice::kAlways;
+  CHECK(alarm::effective(link, never).disarm_pin == alarm::DisarmPin::kAlways);
+  link.disarm_pin = config::PinChoice::kNever;
+  CHECK(!alarm::effective(link, alarm::Policy()).pin_asked());
+  // the settings: the default follows the server, a bad word is refused, the choice is shown and stored
+  config::Settings s = panel_settings();
+  CHECK(s.server.disarm_pin == config::PinChoice::kPolicy);
+  config::Problems problems;
+  config::Settings edited;
+  CHECK(config::load("{\"server\":{\"disarm_pin\":\"always\"}}", s, edited, problems) && edited.server.disarm_pin == config::PinChoice::kAlways);
+  CHECK(config::to_json(edited, false).find("\"disarm_pin\":\"always\"") != std::string::npos);
+  config::Settings stored;
+  problems.clear();
+  CHECK(config::load(config::to_json(edited, true), s, stored, problems) && stored.server.disarm_pin == config::PinChoice::kAlways);
+  problems.clear();
+  CHECK(!config::load("{\"server\":{\"disarm_pin\":\"sometimes\"}}", s, stored, problems));
+  // what the panel does: with the PIN asked a wrong one is refused and counted, with "never" the disarm and the silence go through without one and nobody is locked out
+  const std::string never_message = "{\"config_hash\":false,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"never\"}";
+  const std::string always_message = "{\"config_hash\":false,\"zone_feed\":true,\"zone_feed_signature\":false,\"disarm_pin\":\"always\"}";
+  const std::string old_message = "{\"config_hash\":false,\"zone_feed\":true,\"zone_feed_signature\":false}";
+  auto armed = [](const config::Settings& settings, std::uint64_t& now) {
+    alarm::Runner node(settings);
+    now = 0;
+    node.tick(now);
+    for (int i = 0; i < 20; ++i) { node.feed(1, 800, now); now += 100; node.tick(now); }
+    CHECK(node.arm(alarm::Mode::kAway, true, now) == alarm::Refusal::kNone);
+    now += 5000; node.tick(now);
+    return node;
+  };
+  std::uint64_t now = 0;
+  {
+    alarm::Runner node = armed(panel_settings(), now);
+    CHECK(node.pin_asked());
+    CHECK(node.disarm("", now) == alarm::Refusal::kBadPin && node.panel().phase() != alarm::Phase::kDisarmed);
+    CHECK(node.disarm("0000", now) == alarm::Refusal::kBadPin);
+    CHECK(node.disarm("1234", now) == alarm::Refusal::kNone && node.panel().phase() == alarm::Phase::kDisarmed);
+  }
+  {
+    alarm::Runner node = armed(panel_settings(), now);
+    CHECK(node.handle_policy(always_message));
+    CHECK(node.disarm("0000", now) == alarm::Refusal::kBadPin && node.disarm("1234", now) == alarm::Refusal::kNone);
+  }
+  {
+    alarm::Runner node = armed(panel_settings(), now);
+    CHECK(node.handle_policy(never_message) && !node.pin_asked());
+    CHECK(node.disarm("", now) == alarm::Refusal::kNone && node.panel().phase() == alarm::Phase::kDisarmed);   // no PIN, no refusal
+    CHECK(!node.locked_out(now));
+  }
+  {
+    // three wrong PINs lock the panel while the PIN is asked; once the server says "never" the panel opens again, and when it says "if_set" the PIN is asked as before
+    alarm::Runner node = armed(panel_settings(), now);
+    for (int i = 0; i < 3; ++i) node.disarm("0000", now);
+    CHECK(node.locked_out(now) && node.disarm("1234", now) == alarm::Refusal::kLockedOut);
+    CHECK(node.handle_policy(never_message));
+    CHECK(node.disarm("", now) == alarm::Refusal::kNone && node.panel().phase() == alarm::Phase::kDisarmed);
+    CHECK(node.handle_policy(old_message) && node.pin_asked());
+  }
+  {
+    // fixed on the node: a message of the broker that says "never" changes nothing
+    config::Settings fixed = panel_settings();
+    fixed.server.disarm_pin = config::PinChoice::kAlways;
+    alarm::Runner node = armed(fixed, now);
+    CHECK(node.handle_policy(never_message) && node.pin_asked());
+    CHECK(node.disarm("", now) == alarm::Refusal::kBadPin && node.disarm("1234", now) == alarm::Refusal::kNone);
+  }
+}
+
 int main() {
   test_hashes_against_known_values();
   test_the_signature_is_the_servers();
@@ -270,6 +358,7 @@ int main() {
   test_the_hash_of_the_configuration();
   test_the_checks_of_the_feed();
   test_the_runner_obeys_the_options();
+  test_the_pin_to_disarm();
   std::printf("%d checks, %d failures\n", checks, failures);
   return failures == 0 ? 0 : 1;
 }

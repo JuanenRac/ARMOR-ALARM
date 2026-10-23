@@ -72,8 +72,12 @@ struct PanelSetting {
 // it, and what it did before the server ever said anything), or fixed on this node ("on" / "off"), whatever the server says:
 //   config_hash:      the saved armed state is tied to a hash of the zones and the PIN and is not restored when either changed;
 //   zone_feed:        the server's messages about the Zigbee zones are taken (off: they are ignored);
-//   zone_signature:   a message of the server's zone feed must be signed with the key below (off: an unsigned one is taken too; a signed one is checked whenever there is a key).
+//   zone_signature:   a message of the server's zone feed must be signed with the key below (off: an unsigned one is taken too; a signed one is checked whenever there is a key);
+//   disarm_pin:       what is asked to disarm or silence the siren from the panel's page or the central's API: "never" (no PIN, no lockout), "if_set" or "always" (the PIN, as the panel always did;
+//                     a panel with zones always has one). "policy" follows the server's alarm.disarm_pin; fixing it here to "if_set" or "always" keeps a message of the broker from lowering it.
 enum class Choice { kPolicy, kOn, kOff };
+enum class PinChoice { kPolicy, kNever, kIfSet, kAlways };
+inline const char* to_text(PinChoice v) { return v == PinChoice::kNever ? "never" : v == PinChoice::kIfSet ? "if_set" : v == PinChoice::kAlways ? "always" : "policy"; }
 inline const char* to_text(Choice v) { return v == Choice::kOn ? "on" : v == Choice::kOff ? "off" : "policy"; }
 inline bool zone_feed_key_is_valid(std::string_view key) {
   if (key.size() != 64) return false;
@@ -83,6 +87,7 @@ inline bool zone_feed_key_is_valid(std::string_view key) {
 struct ServerLink {
   bool commands = false;
   Choice config_hash = Choice::kPolicy, zone_feed = Choice::kPolicy, zone_signature = Choice::kPolicy;
+  PinChoice disarm_pin = PinChoice::kPolicy;
   std::string zone_feed_key;   // 64 hexadecimal digits, from Studio (GET /api/v1/alarm/zone-feed/key/{node}); a secret like the PIN, never shown again
 };
 
@@ -190,6 +195,8 @@ inline void read_settings(const json::Value& document, Settings& s, Problems& pr
     if (!read_choice<Choice>(*server, "config_hash", choices, s.server.config_hash)) bad(problems, "server.config_hash", "invalid");
     if (!read_choice<Choice>(*server, "zone_feed", choices, s.server.zone_feed)) bad(problems, "server.zone_feed", "invalid");
     if (!read_choice<Choice>(*server, "zone_signature", choices, s.server.zone_signature)) bad(problems, "server.zone_signature", "invalid");
+    const std::initializer_list<std::pair<const char*, PinChoice>> pin_choices = {{"policy", PinChoice::kPolicy}, {"never", PinChoice::kNever}, {"if_set", PinChoice::kIfSet}, {"always", PinChoice::kAlways}};
+    if (!read_choice<PinChoice>(*server, "disarm_pin", pin_choices, s.server.disarm_pin)) bad(problems, "server.disarm_pin", "invalid");
     read_secret(*server, "zone_feed_key", s.server.zone_feed_key, "server.zone_feed_key", problems);
   }
 }
@@ -299,7 +306,7 @@ inline std::string to_json(const Settings& s, bool secrets) {
       .field("lockout_s", static_cast<long long>(s.panel.timing.lockout_s)).field("zigbee_silence_min", static_cast<long long>(s.panel.timing.zigbee_silence_min)).field("siren_relay", s.panel.siren_relay);
   if (secrets) w.field("pin", s.panel.pin); else w.field("pin_set", !s.panel.pin.empty());
   w.end_object();
-  w.key("server").begin_object().field("commands", s.server.commands).field("config_hash", to_text(s.server.config_hash)).field("zone_feed", to_text(s.server.zone_feed)).field("zone_signature", to_text(s.server.zone_signature));
+  w.key("server").begin_object().field("commands", s.server.commands).field("config_hash", to_text(s.server.config_hash)).field("zone_feed", to_text(s.server.zone_feed)).field("zone_signature", to_text(s.server.zone_signature)).field("disarm_pin", to_text(s.server.disarm_pin));
   if (secrets) w.field("zone_feed_key", s.server.zone_feed_key); else w.field("zone_feed_key_set", !s.server.zone_feed_key.empty());
   w.end_object();
   w.key("zigbee_local").begin_object().field("after_s", s.zigbee_local.after_s).key("sirens").begin_array();

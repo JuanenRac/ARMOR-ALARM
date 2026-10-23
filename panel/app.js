@@ -681,6 +681,7 @@ function panelPage() {
         field("panelServerCommands", "server.commands", { type: "checkbox" })),
       el("section", { class: "card" }, el("h2", {}, t("panelSecurityTitle")), el("p", { class: "muted" }, t("panelSecurityHelp")),
         securityChoice("panelOptHash", "server.config_hash"), securityChoice("panelOptFeed", "server.zone_feed"), securityChoice("panelOptSignature", "server.zone_signature"),
+        field("panelOptDisarmPin", "server.disarm_pin", { type: "select", options: [["policy", t("choicePolicy")], ["never", t("choiceNever")], ["if_set", t("choiceIfSet")], ["always", t("choiceAlways")]] }),
         feedKeyField())));
 }
 
