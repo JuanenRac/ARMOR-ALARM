@@ -10,7 +10,8 @@ It has the web panel of every other node (set-up, login, users, Wi-Fi, broker, u
 - `core/alarm_config.hpp`: the settings (zones, the loop's limits, the panel, the siren, the server's commands) on top of `core/node_settings.hpp` (what every node has) and `core/io_config.hpp` (the base board's radio and relays).
 - `core/alarm_message.hpp`: the state, the command and the answer, checked against ARMOR-COMMON's contract by `tests/emit_samples.cpp` and `tests/check_samples.py`.
 - `core/alarm_runner.hpp`: what the node does on every turn - the readings go in, the panel's state and the siren come out.
-- `main/alarm_manager.cpp`: the task that reads the ADC (ADC1 only), feeds the runner, drives the siren, publishes and listens for commands.
+- `core/alarm_supervisor.hpp`: what the task decides around the panel - what comes back from flash at start (and when it must not: the hash of the zones and the PIN), what is written to flash and when (the state at once, the events at most every half minute unless something that matters happened), and when the state is said again. It asks for writes and is told when they are done; it touches no flash itself.
+- `main/alarm_manager.cpp`: the task that reads the ADC (ADC1 only), feeds the supervisor and the runner, does the flash writes the supervisor asks for, drives the siren, publishes and listens for commands.
 - `main/web_server.cpp`, `main/api_shared.cpp`, `panel/`: the panel's server and pages.
 - `main/relay_outputs.cpp`: the relays, the same file as the electrical node's (the siren's relay is reserved to the alarm). `main/zigbee_bridge.cpp` is this project's own: it also lends the radio to the node itself and talks to a coordinator on the network.
 
