@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the messages of an alarm node (contract version 0, see docs/ALARM_MESSAGES.md).
+// ARMOR-NODE-ALARM - the messages of an alarm node (contract version 0, see docs/ALARM_MESSAGES.md).
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 //   armor/alarm/<node>/state     one message per node, every few seconds and at every change; JSON, no retained flag. What the panel is doing: its phase and mode, the siren, each zone and the last events.

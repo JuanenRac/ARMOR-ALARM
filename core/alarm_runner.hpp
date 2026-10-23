@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the alarm at work, without the hardware: the wired zones' readings go in, the panel's state and the siren come out.
+// ARMOR-NODE-ALARM - the alarm at work, without the hardware: the wired zones' readings go in, the panel's state and the siren come out.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // What the node does on every turn of its loop: each enabled zone's reading (millivolts at its pin, from the ADC) is classified (alarm_zone.hpp), debounced and handed to the panel

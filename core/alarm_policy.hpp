@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the security options the server keeps for the panel, and what the node does with them: the hash that ties the saved armed state to the zones and the PIN it was saved with, and the
+// ARMOR-NODE-ALARM - the security options the server keeps for the panel, and what the node does with them: the hash that ties the saved armed state to the zones and the PIN it was saved with, and the
 // checks of the server's zone messages (the signature and the sequence number). Pure: no hardware, all tested on a computer.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //

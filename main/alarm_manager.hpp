@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the alarm at work: one task reads the wired zones, runs the panel (core/alarm_runner.hpp), drives the siren and tells the broker what it sees.
+// ARMOR-NODE-ALARM - the alarm at work: one task reads the wired zones, runs the panel (core/alarm_runner.hpp), drives the siren and tells the broker what it sees.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #pragma once
 #include <array>

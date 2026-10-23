@@ -1,5 +1,5 @@
 /*
- * ARMOR-ALARM - ESP32-S3 alarm node (the Waveshare ESP32-S3-ETH on its cable, or an ESP32-S3-WROOM-1 N16R8 on Wi-Fi): reads the wired zones of the house (a loop with an end-of-line resistor on an
+ * ARMOR-NODE-ALARM - ESP32-S3 alarm node (the Waveshare ESP32-S3-ETH on its cable, or an ESP32-S3-WROOM-1 N16R8 on Wi-Fi): reads the wired zones of the house (a loop with an end-of-line resistor on an
  * analog pin), runs the alarm panel (arming, the delays, the alarm, the siren, the PIN) and tells the A.R.M.O.R. server what it sees. Its base board also carries a Zigbee radio it lends to Zigbee2MQTT.
  * Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
  *

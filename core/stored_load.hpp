@@ -1,4 +1,4 @@
-// ARMOR-ALARM - reading the settings kept in flash after an update. Pure: tested on a computer.
+// ARMOR-NODE-ALARM - reading the settings kept in flash after an update. Pure: tested on a computer.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #pragma once
 #include <cstddef>

@@ -1,4 +1,4 @@
-// ARMOR-ALARM - host tests of the security options the server keeps for the panel: SHA-256 and HMAC against known values, the hash that ties the saved armed state to the zones and the PIN, the
+// ARMOR-NODE-ALARM - host tests of the security options the server keeps for the panel: SHA-256 and HMAC against known values, the hash that ties the saved armed state to the zones and the PIN, the
 // server's policy message, and the checks of the signed zone feed (signature, sequence number, the options on the node). No hardware was used.
 #include <cstdio>
 #include <string>

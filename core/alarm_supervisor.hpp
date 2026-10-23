@@ -1,4 +1,4 @@
-// ARMOR-ALARM - what the alarm task decides around the panel, without the hardware: what comes back from flash at start, what must be written to flash and when, and when the state is said again.
+// ARMOR-NODE-ALARM - what the alarm task decides around the panel, without the hardware: what comes back from flash at start, what must be written to flash and when, and when the state is said again.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // The task in main/alarm_manager.cpp only reads the pins, gives this the clock, writes what it asks to be written, puts the siren's level on its relay and talks to the broker. The rules are here and are

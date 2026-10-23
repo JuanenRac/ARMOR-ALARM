@@ -1,4 +1,4 @@
-/* ARMOR-ALARM node panel - the pages. Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
+/* ARMOR-NODE-ALARM node panel - the pages. Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
    text.js (the eight languages) is joined in front of this file when the panel is packed, so LANGS and L exist here.
    No framework and no inline style: the panel is served with a strict content-security policy. */
 "use strict";
@@ -796,7 +796,7 @@ function aboutPage() {
       el("p", {}, t("aboutDescription")),
       kv([[t("nodeId"), s ? s.node_id : "—"], [t("nodeName"), s ? s.name : "—"], [t("firmware"), s ? s.version : "—"],
         [t("author"), "JuanenRac · Electro Hobby 3D"], [t("license"), "GPL-3.0-or-later"]]),
-      el("p", { class: "muted mono" }, "github.com/JuanenRac/ARMOR-ALARM")));
+      el("p", { class: "muted mono" }, "github.com/JuanenRac/ARMOR-NODE-ALARM")));
 }
 
 const HELP_TOPICS = ["overview", "alarm", "zones", "panel", "zigbee", "io", "network", "wifi", "broker", "users", "update"];

@@ -1,4 +1,4 @@
-# ARMOR-ALARM host tests: the zones, the rules of the panel, the node's settings and messages and the runner that ties them together, built with any C++17 compiler.
+# ARMOR-NODE-ALARM host tests: the zones, the rules of the panel, the node's settings and messages and the runner that ties them together, built with any C++17 compiler.
 # Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 cmake_minimum_required(VERSION 3.16)
 project(armor_alarm_host_tests CXX)

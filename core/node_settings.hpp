@@ -38,7 +38,7 @@ struct IpSettings {
 
 struct AccessPoint {
   bool enabled = false;
-  std::string ssid = "ARMOR-ALARM";
+  std::string ssid = "ARMOR-NODE-ALARM";
   WifiSecurity security = WifiSecurity::kWpa2;
   std::string password;
   int channel = 0;  // 0: one of 1, 6 or 11 chosen from the node's MAC

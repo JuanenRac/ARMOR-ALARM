@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the settings of an alarm node: what the panel's web page edits, what is stored in flash and what the firmware obeys.
+// ARMOR-NODE-ALARM - the settings of an alarm node: what the panel's web page edits, what is stored in flash and what the firmware obeys.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // What every node has (identity, the way in, the broker, the clock...) is core/node_settings.hpp's, and the base board's Zigbee radio, relays and whether the broker may move them are

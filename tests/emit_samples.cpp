@@ -1,4 +1,4 @@
-// ARMOR-ALARM - prints the messages a node would publish and answer, one per line ("armor/alarm/<node>/<leaf> <json>"), for tests/check_samples.py.
+// ARMOR-NODE-ALARM - prints the messages a node would publish and answer, one per line ("armor/alarm/<node>/<leaf> <json>"), for tests/check_samples.py.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #include <cstdio>
 #include <string>

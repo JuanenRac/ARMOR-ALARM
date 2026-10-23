@@ -1,6 +1,6 @@
-# ARMOR-ALARM: what it is for and how it is built
+# ARMOR-NODE-ALARM: what it is for and how it is built
 
-ARMOR-ALARM is the part of A.R.M.O.R. that guards the house: the **zones** (doors, windows, motion, smoke, panic), the **arming** and its delays, the **alarm**, the **siren** and the **PIN**. It works with ARMOR-SERVER, which already knows the kinds of device an alarm needs (door, window, motion, smoke, siren, panic button) and has the notion of "armed"; and it is built to **keep guarding when the server is away** ([FAILOVER.md](FAILOVER.md)).
+ARMOR-NODE-ALARM is the part of A.R.M.O.R. that guards the house: the **zones** (doors, windows, motion, smoke, panic), the **arming** and its delays, the **alarm**, the **siren** and the **PIN**. It works with ARMOR-SERVER, which already knows the kinds of device an alarm needs (door, window, motion, smoke, siren, panic button) and has the notion of "armed"; and it is built to **keep guarding when the server is away** ([FAILOVER.md](FAILOVER.md)).
 
 ## What exists
 

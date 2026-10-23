@@ -1,4 +1,4 @@
-// ARMOR-ALARM - arming profiles: the named ways of arming the panel (Away, Home, Night, a custom one). No hardware, no network: all of it is tested on a computer.
+// ARMOR-NODE-ALARM - arming profiles: the named ways of arming the panel (Away, Home, Night, a custom one). No hardware, no network: all of it is tested on a computer.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // A profile is a small description that comes inside the arm command of the server (contract arm_profile.schema.json in ARMOR-COMMON) and says, for this one arming:

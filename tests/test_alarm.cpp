@@ -1,4 +1,4 @@
-// ARMOR-ALARM - host tests of the zones and the panel: scripted scenarios, then a long random run that checks the rules that must always hold.
+// ARMOR-NODE-ALARM - host tests of the zones and the panel: scripted scenarios, then a long random run that checks the rules that must always hold.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 // Nothing here has run on a real installation: the zones are stand-ins and the clock is a number the test moves.
 #include <cstdio>

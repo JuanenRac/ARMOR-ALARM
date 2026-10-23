@@ -1,4 +1,4 @@
-// ARMOR-ALARM - host tests of what the alarm task decides around the panel (core/alarm_supervisor.hpp): what comes back from flash at start, what is written and when, when the state is said again,
+// ARMOR-NODE-ALARM - host tests of what the alarm task decides around the panel (core/alarm_supervisor.hpp): what comes back from flash at start, what is written and when, when the state is said again,
 // and the rules of the panel seen through it: arming and disarming, the PIN and its lockout, the delays and the siren's timer. No hardware was used.
 #include <cstdio>
 #include <string>

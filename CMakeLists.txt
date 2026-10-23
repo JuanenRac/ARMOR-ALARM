@@ -1,4 +1,4 @@
-# ARMOR-ALARM ESP-IDF project entry point (the firmware of the alarm node). The host tests are a separate project in tests/.
+# ARMOR-NODE-ALARM ESP-IDF project entry point (the firmware of the alarm node). The host tests are a separate project in tests/.
 # Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 cmake_minimum_required(VERSION 3.16)
 # The firmware's version is the project's: it is read from armor.project.json, the one place that says it.

@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the alarm at work: the task that reads the wired zones and runs core/alarm_runner.hpp. Nothing here has run on a board.
+// ARMOR-NODE-ALARM - the alarm at work: the task that reads the wired zones and runs core/alarm_runner.hpp. Nothing here has run on a board.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // What the panel decides (the states of a loop, the delays, the PIN, the siren) and what the task decides around it (what comes back from flash, what is written and when, when the state is said

@@ -1,4 +1,4 @@
-// ARMOR-ALARM - SHA-256 and HMAC-SHA256, small and portable: the same code runs on the board and in the tests on a computer, so the signature of the server's zone messages and the hash of
+// ARMOR-NODE-ALARM - SHA-256 and HMAC-SHA256, small and portable: the same code runs on the board and in the tests on a computer, so the signature of the server's zone messages and the hash of
 // the panel's configuration are checked against known values before they are ever run on a board.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #pragma once

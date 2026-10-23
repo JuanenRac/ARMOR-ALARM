@@ -1,4 +1,4 @@
-// ARMOR-ALARM - what the panel does over HTTP: the status, the alarm and its zones, the settings and the search for Wi-Fi networks.
+// ARMOR-NODE-ALARM - what the panel does over HTTP: the status, the alarm and its zones, the settings and the search for Wi-Fi networks.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #include "api_shared.hpp"
 

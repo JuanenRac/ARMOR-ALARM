@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the node's network: the Ethernet port (the s3-eth board), the Wi-Fi station, the Wi-Fi access point, or a mix.
+// ARMOR-NODE-ALARM - the node's network: the Ethernet port (the s3-eth board), the Wi-Fi station, the Wi-Fi access point, or a mix.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #pragma once
 #include <string>

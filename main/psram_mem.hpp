@@ -1,4 +1,4 @@
-// ARMOR-ALARM - puts what is safe in the external memory (PSRAM) and keeps the small internal memory for what needs it. The rules are in core/memory_budget.hpp (tested on a computer);
+// ARMOR-NODE-ALARM - puts what is safe in the external memory (PSRAM) and keeps the small internal memory for what needs it. The rules are in core/memory_budget.hpp (tested on a computer);
 // nothing here has run on a board.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #pragma once

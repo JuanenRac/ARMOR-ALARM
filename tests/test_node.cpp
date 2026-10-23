@@ -1,4 +1,4 @@
-// ARMOR-ALARM - host tests of the node: its settings (what the page edits and the flash keeps), its messages and the runner that ties the wired zones to the panel.
+// ARMOR-NODE-ALARM - host tests of the node: its settings (what the page edits and the flash keeps), its messages and the runner that ties the wired zones to the panel.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 // No ADC, relay or broker was used: the readings and the clock are numbers the test moves.
 #include <cmath>
@@ -51,7 +51,7 @@ static config::Settings house() {
 
 static void test_defaults() {
   const config::Settings s = config::default_settings("a1b2c3");
-  CHECK(s.node_id == "alarm-a1b2c3" && s.node_name == s.node_id && s.zones.size() == 8 && std::string(s.ap.ssid) == "ARMOR-ALARM");
+  CHECK(s.node_id == "alarm-a1b2c3" && s.node_name == s.node_id && s.zones.size() == 8 && std::string(s.ap.ssid) == "ARMOR-NODE-ALARM");
   CHECK(s.zones[0].id == "zone1" && s.zones[7].id == "zone8" && !s.zones[0].enabled && s.zones[0].pin == board::kAnalogPins[0] && s.zones[0].hold_ms == 200);
   CHECK(!s.zigbee.enabled && !s.remote.relays && !s.server.commands && s.panel.pin.empty() && s.panel.siren_relay.empty());
   CHECK(s.panel.timing.exit_delay_s == 30 && s.panel.timing.entry_delay_s == 30 && s.panel.timing.siren_max_s == 180 && alarm::limits_are_valid(s.loop));
