@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the serial protocol of a Texas Instruments Z-Stack coordinator (ZNP): frames, and the few commands the panel needs. No hardware, no network.
+// ARMOR-NODE-ALARM - the serial protocol of a Texas Instruments Z-Stack coordinator (ZNP): frames, and the few commands the panel needs. No hardware, no network.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // A frame is  SOF (0xFE), LEN (the data's length), CMD0 (the type in its top three bits, the subsystem in the low five), CMD1 (the command), the data, and FCS (the XOR of every byte from

@@ -1,4 +1,4 @@
-// ARMOR-ALARM - host tests of the corners of the panel and of what it reads: the PIN lockout and how it grows, the record a restart brings back, an arming profile and a command that are nearly
+// ARMOR-NODE-ALARM - host tests of the corners of the panel and of what it reads: the PIN lockout and how it grows, the record a restart brings back, an arming profile and a command that are nearly
 // right, and the readings of a wired loop at the edge of each limit.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 // No loop, siren or broker is used: the zones are numbers the test sets, and the clock is a number the test moves.

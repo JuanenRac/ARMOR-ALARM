@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the rules of the panel: arming, the exit and entry delays, the alarm, the siren and the PIN. No hardware, no network: all of it is tested on a computer.
+// ARMOR-NODE-ALARM - the rules of the panel: arming, the exit and entry delays, the alarm, the siren and the PIN. No hardware, no network: all of it is tested on a computer.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // The panel is a state machine fed with the state of each zone and with the requests of whoever is at the keypad (or of the server):

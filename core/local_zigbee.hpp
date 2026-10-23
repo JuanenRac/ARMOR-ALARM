@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the panel speaking Zigbee itself: the coordinator's start-up conversation, the sensors it listens to and the sirens it commands, with no hardware and no network.
+// ARMOR-NODE-ALARM - the panel speaking Zigbee itself: the coordinator's start-up conversation, the sensors it listens to and the sirens it commands, with no hardware and no network.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // While ARMOR-SERVER's Zigbee2MQTT has the radio the node only lends its serial line (zigbee_bridge.hpp). When that client has been away for a while the node takes the radio over and

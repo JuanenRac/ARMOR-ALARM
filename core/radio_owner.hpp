@@ -1,4 +1,4 @@
-// ARMOR-ALARM - who holds the Zigbee radio: the server's client, or the node itself once that client has been away long enough. No hardware.
+// ARMOR-NODE-ALARM - who holds the Zigbee radio: the server's client, or the node itself once that client has been away long enough. No hardware.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // The radio's serial line is lent to one TCP client (the server's Zigbee2MQTT). While a client is connected it is the owner and the node only carries bytes. When no client has been

@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the node's own TLS certificate: made once, kept in flash, used by the HTTPS panel.
+// ARMOR-NODE-ALARM - the node's own TLS certificate: made once, kept in flash, used by the HTTPS panel.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #pragma once
 #include <string>

@@ -1,4 +1,4 @@
-// ARMOR-ALARM - host tests of the Zigbee side of the panel: the ZNP frames, the two alarm clusters, the node's own conversation with a coordinator (against a stand-in that answers as the
+// ARMOR-NODE-ALARM - host tests of the Zigbee side of the panel: the ZNP frames, the two alarm clusters, the node's own conversation with a coordinator (against a stand-in that answers as the
 // protocol says), who holds the radio, and the settings and the zones that name a sensor. No radio was used.
 #include <cstdio>
 #include <string>

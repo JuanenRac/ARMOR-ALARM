@@ -1,4 +1,4 @@
-// ARMOR-ALARM - what a zone is, and how a wired loop read by the ADC becomes a state.
+// ARMOR-NODE-ALARM - what a zone is, and how a wired loop read by the ADC becomes a state.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // A zone is one thing that can raise the alarm: a wired loop (a contact with an end-of-line resistor, read as a voltage), or a Zigbee sensor the panel hears about (a door or

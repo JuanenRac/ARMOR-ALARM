@@ -1,4 +1,4 @@
-// ARMOR-ALARM - comparing firmware versions: "x.y.z", or "x.y.z.b" from 0.8.0 on (an optional leading "v" is ignored, as GitHub's tags have one).
+// ARMOR-NODE-ALARM - comparing firmware versions: "x.y.z", or "x.y.z.b" from 0.8.0 on (an optional leading "v" is ignored, as GitHub's tags have one).
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #pragma once
 #include <string_view>

@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the node's own TLS certificate.
+// ARMOR-NODE-ALARM - the node's own TLS certificate.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #include "tls_cert.hpp"
 

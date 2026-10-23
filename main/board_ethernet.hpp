@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the Ethernet hardware of the Waveshare ESP32-S3-ETH (W5500 over SPI).
+// ARMOR-NODE-ALARM - the Ethernet hardware of the Waveshare ESP32-S3-ETH (W5500 over SPI).
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 #pragma once
 extern "C" {

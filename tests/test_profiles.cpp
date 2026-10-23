@@ -1,4 +1,4 @@
-// ARMOR-ALARM - host tests of the arming profiles: how a profile is read, what it changes in the panel and, as important, what it never changes.
+// ARMOR-NODE-ALARM - host tests of the arming profiles: how a profile is read, what it changes in the panel and, as important, what it never changes.
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 // Nothing here has run on a real installation: the zones are stand-ins and the clock is a number the test moves.
 #include <cstdint>

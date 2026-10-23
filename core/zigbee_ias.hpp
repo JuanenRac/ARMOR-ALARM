@@ -1,4 +1,4 @@
-// ARMOR-ALARM - the two Zigbee clusters of an alarm, read and written as ZNP frames: IAS Zone (what a door contact, a motion sensor or a smoke detector says) and IAS WD (the siren).
+// ARMOR-NODE-ALARM - the two Zigbee clusters of an alarm, read and written as ZNP frames: IAS Zone (what a door contact, a motion sensor or a smoke detector says) and IAS WD (the siren).
 // Copyright (C) 2026 JuanenRac (Electro Hobby 3D). GPL-3.0-or-later.
 //
 // A sensor reports with a *Zone Status Change Notification*: a 16-bit status whose bits say alarm, tamper, low battery and so on. The coordinator hands it over as an AF_INCOMING_MSG
