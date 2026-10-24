@@ -42,6 +42,25 @@
 | Stack | C++17 host-tested core; ESP-IDF 5.5.5 firmware for the ESP32-S3 (PoE Ethernet and Wi-Fi boards) |
 | On real hardware | None yet: no board, zone, siren or Zigbee coordinator connected (host tests, the build and the panel in a browser only) |
 
+## 🚦 Project status
+
+Each line is one part of this repository and the light says how far it is today. It is written from what the repository can show (tests, builds, runs), not from what is planned.
+
+🟢 Done and verified · 🟡 Works, with known limits · 🟠 Partly done or not verified yet · 🔴 Not done or not working
+
+| Area | State | What it means here |
+|---|---|---|
+| Software | 🟢 | The firmware builds in the ESP-IDF 5.5.5 container for both boards (Wi-Fi and Ethernet). |
+| Tests | 🟢 | 486,690 checks in 14 host programs pass (`ctest`): the zones, the wired loops read by the ADC, the arming, delays, siren and PIN rules, the settings and the messages. |
+| Protocols and data | 🟠 | The node's own Zigbee conversation with a coordinator, local or on the network, is tested only against a stand-in coordinator; it has never met a real coordinator or sensor. |
+| Interface | 🟡 | The web panel is exercised in a real browser against a stand-in node, not on a board. |
+| Hardware | 🔴 | No board built, no zone wired and no siren or Zigbee coordinator connected: nothing has run on a real installation. |
+| Security | 🟡 | The PIN with lockout, the set-up code, the login limit and the signed updates are tested on the host; there has been no independent review and this is not a certified alarm system. |
+| Updates | 🟠 | The hash and Ed25519 signature checks and the rollback logic pass on the host; an update over the air has never been run on a board. |
+| Writing to equipment | 🟠 | The siren and the relays are driven by the alarm rules and tested against stand-ins; none has been connected to a real siren or relay. |
+| Integration | 🟢 | The messages of the node are validated against the shared schemas and conformance vectors of ARMOR-COMMON. |
+| Documentation | 🟢 | Eight languages, the firmware guide, the wiring notes and the changelog are up to date. |
+
 ## 🎯 Overview
 
 * **Zones:** four kinds - *instant* (a door, a window), *entry* (the door you come in through: it starts the entry delay), *interior* (motion: only in "away") and *always* (smoke, gas, panic: armed or not). A zone may be a wired loop or a Zigbee sensor.
