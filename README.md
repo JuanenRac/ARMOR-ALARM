@@ -105,8 +105,10 @@ ARMOR-NODE-ALARM/
 ├── main/    the ESP-IDF firmware: alarm_manager, the web server, the Zigbee bridge, the relays
 ├── panel/   the web panel (eight languages)
 ├── tests/   test_alarm (the rules), test_profiles (the arming profiles), test_node (settings, messages, runner), test_mqtt_tls (the optional encrypted link to the broker), test_release (update from GitHub), emit_samples + check_samples (the messages against the contract), test_zigbee (ZNP, IAS Zone and WD, the node's own conversation with a coordinator)
-├── tools/   the stand-in node and the browser test of the panel
-├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING
+├── tools/   build_node.sh, check_sdkconfig.py, pack_panel.py, panel_mock.mjs (the stand-in node), panel_browser_test.mjs (the browser test of the panel), the shared CI checks (armor_ci_validate.py, armor_project_tool.py, _armor_readme_parity.py)
+├── secrets/ node.conf.example (the real files are git-ignored)
+├── CMakeLists.txt, partitions.csv, sdkconfig.defaults, sdkconfig.board.*   the ESP-IDF project, the flash layout and the settings of each board (s3-eth, s3-wifi)
+├── docs/    DESIGN, FAILOVER, SAFETY, NODE_FIRMWARE, ALARM_MESSAGES, HARDWARE, BASE_BOARD, ZIGBEE, BLE_PROVISIONING, BENCH_TESTS, SETUP_CODE
 └── images/  brand assets
 ```
 
